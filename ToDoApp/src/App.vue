@@ -16,11 +16,16 @@ import HelloWorld from './components/HelloWorld.vue'
     <div class="domains" v-for="domains in domain" :key="domain.id">
       <div class="domainName">
         <h2>{{ domain.name }}</h2>
-        <img src="" alt="">
+        <img src="../img/logo.png" alt="">
       </div>
 
-      <div>
-
+      <!--Den + Symbol und den Filter Symbol hinzufügen-->
+      <div class="buttonContainer">
+        <button>
+          <h3>Bereich hinzufügen</h3>
+          <img src="" alt="Bereich hinzufügen">
+        </button>
+        <button><img src="" alt="Filter"></button>
       </div>
 
       <div class="toDoHead">
