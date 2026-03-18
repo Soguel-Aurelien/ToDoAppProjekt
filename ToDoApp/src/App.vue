@@ -77,7 +77,7 @@ const filteredDomains = computed(() => {
       <section v-for="domain in filteredDomains" :key="domain.id" class="domain-card">
         <div class="domain-header">
           <h2>{{ domain.name }}</h2>
-          <button type="button" class="BereichHinzufügen">Bereich hinzufügen</button>
+          <button type="button" class="TaskADD">Todo Hinzufügen</button>
         </div>
 
         <table class="todo-table">
@@ -172,7 +172,7 @@ h1 {
   font-weight: 700;
 }
 
-.BereichHinzufügen {
+.TaskADD {
   padding: 10px 14px;
   border: 0;
   border-radius: 10px;
