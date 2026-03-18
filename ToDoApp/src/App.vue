@@ -89,9 +89,6 @@ const filteredDomains = computed(() => {
           <h2>{{ domain.name }}</h2>
 <<<<<<< Updated upstream
           <button type="button" class="TaskADD">Todo Hinzufügen</button>
-=======
-          <button type="button" class="action-button">Bereich hinzufuegen</button>
->>>>>>> Stashed changes
         </div>
 
         <table class="todo-table">
@@ -239,11 +236,7 @@ const filteredDomains = computed(() => {
   font-weight: 700;
 }
 
-<<<<<<< Updated upstream
-.TaskADD {
-=======
-.action-button {
->>>>>>> Stashed changes
+.TaskADD  {
   padding: 10px 14px;
   border: 0;
   border-radius: 10px;
