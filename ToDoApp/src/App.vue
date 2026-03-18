@@ -87,7 +87,7 @@ const filteredDomains = computed(() => {
       <section v-for="domain in filteredDomains" :key="domain.id" class="domain-card">
         <div class="domain-header">
           <h2>{{ domain.name }}</h2>
-<<<<<<< Updated upstream
+
           <button type="button" class="TaskADD">Todo Hinzufügen</button>
         </div>
 
