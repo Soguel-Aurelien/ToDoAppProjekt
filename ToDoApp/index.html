@@ -5,62 +5,9 @@
     <link rel="icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ToDo</title>
-
-    <style>
-      /* Navbar-Farbe 1:1 hellblau */
-      .nav {
-        background: #66a1cf;
-        height: 70px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        position: relative;
-        padding: 0 16px;
-      }
-
-      /* Logo genau in der Mitte */
-      .nav img {
-        height: 42px;
-      }
-
-      /* Suche rechts */
-      .search {
-        position: absolute;
-        right: 16px;
-        display: flex;
-        gap: 8px;
-        align-items: center;
-      }
-      .search input {
-        height: 36px;
-        padding: 0 12px;
-        border: 0;
-        border-radius: 10px;
-        outline: none;
-      }
-      .search button {
-        height: 36px;
-        padding: 0 12px;
-        border: 0;
-        border-radius: 10px;
-        cursor: pointer;
-        font-weight: 700;
-      }
-
-      body { margin: 0; font-family: Arial, sans-serif; }
-    </style>
   </head>
 
   <body>
-    <header class="nav">
-      <img src="./img/logo.png" alt="ToDo Logo" />
-
-      <form class="search" onsubmit="event.preventDefault(); console.log('Suche:', this.q.value)">
-        <input name="q" type="search" placeholder="Suchen..." />
-        <button type="submit">Suchen</button>
-      </form>
-    </header>
-
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
   </body>

@@ -1,119 +1,223 @@
 <script setup>
-import { RouterLink, RouterView } from 'vue-router'
-import HelloWorld from './components/HelloWorld.vue'
+import { computed, ref } from 'vue'
+
+const search = ref('')
+
+const domains = ref([
+  {
+    id: 1,
+    name: 'Schule',
+    toDos: [
+      {
+        id: 1,
+        title: 'Präsentation fertigstellen',
+        description: 'Folien prüfen und Quellen ergänzen',
+        endDate: '2026-03-21',
+        priority: 'Hoch',
+        status: 'Offen',
+      },
+      {
+        id: 2,
+        title: 'Mathe üben',
+        description: 'Zwei Aufgabenblätter rechnen',
+        endDate: '2026-03-19',
+        priority: 'Mittel',
+        status: 'In Arbeit',
+      },
+    ],
+  },
+  {
+    id: 2,
+    name: 'Privat',
+    toDos: [
+      {
+        id: 3,
+        title: 'Einkaufen',
+        description: 'Milch, Brot, Gemüse',
+        endDate: '2026-03-18',
+        priority: 'Niedrig',
+        status: 'Offen',
+      },
+    ],
+  },
+])
+
+const filteredDomains = computed(() => {
+  const query = search.value.trim().toLowerCase()
+
+  if (!query) {
+    return domains.value
+  }
+
+  return domains.value
+    .map((domain) => ({
+      ...domain,
+      toDos: domain.toDos.filter((todo) =>
+        [todo.title, todo.description, todo.priority, todo.status]
+          .join(' ')
+          .toLowerCase()
+          .includes(query),
+      ),
+    }))
+    .filter((domain) => domain.name.toLowerCase().includes(query) || domain.toDos.length > 0)
+})
 </script>
 
 <template>
-  <header class="header">
-
-    <h1>ToDo</h1>
-    <img src="" alt="">
-    <input type="text" v-model="search" placeholder="Search..." class="searchBar">
-  </header>
-
-  <!--Muss noch die kategorien und unterkategorien erstellen-->
-  <main class="mainContent">
-    <div class="domains" v-for="domains in domain" :key="domain.id">
-      <div class="domainName">
-        <h2>{{ domain.name }}</h2>
-        <img src="../img/logo.png" alt="">
+  <div class="app-shell">
+    <header class="header">
+      <div>
+        <p class="eyebrow">ToDo App</p>
+        <h1>Meine Aufgaben</h1>
       </div>
+      <input v-model="search" type="text" placeholder="Suchen..." class="search-bar" />
+    </header>
 
-      <!--Den + Symbol und den Filter Symbol hinzufügen-->
-      <div class="buttonContainer">
-        <button>
-          <h3>Bereich hinzufügen</h3>
-          <img src="" alt="Bereich hinzufügen">
-        </button>
-        <button><img src="" alt="Filter"></button>
-      </div>
+    <main class="main-content">
+      <section v-for="domain in filteredDomains" :key="domain.id" class="domain-card">
+        <div class="domain-header">
+          <h2>{{ domain.name }}</h2>
+          <button type="button" class="action-button">Bereich hinzufügen</button>
+        </div>
 
-      <div class="toDoHead">
-        <tr>
-          <th>Titel</th>
-          <th>Beschreibung</th>
-          <th>Enddatum</th>
-          <th>Priorität</th>
-          <th>Status</th>
-        </tr>
-        <tr class="toDo" v-for="toDo in domain.toDos" :key="toDo.id">
-          <td>{{ toDo.titel }}</td>
-          <td>{{ toDo.description }}</td>
-          <td>{{ toDo.enddate }}</td>
-          <td>{{ toDo.priority }}</td>
-          <td>{{ toDo.status }}</td>
-
-          <!--Papierkorb icone hinzufügen-->
-          <td><img src="" alt=""></td>
-        </tr>
-      </div>
-    </div>
-
-  </main>
+        <table class="todo-table">
+          <thead>
+            <tr>
+              <th>Titel</th>
+              <th>Beschreibung</th>
+              <th>Enddatum</th>
+              <th>Priorität</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="todo in domain.toDos" :key="todo.id">
+              <td>{{ todo.title }}</td>
+              <td>{{ todo.description }}</td>
+              <td>{{ todo.endDate }}</td>
+              <td>{{ todo.priority }}</td>
+              <td>{{ todo.status }}</td>
+            </tr>
+            <tr v-if="domain.toDos.length === 0">
+              <td colspan="5" class="empty-state">Keine Einträge für diese Suche.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </div>
 </template>
 
 <style scoped>
-header {
-  line-height: 1.5;
-  max-height: 100vh;
+.app-shell {
+  min-height: 100vh;
+  padding: 32px;
+  background: linear-gradient(180deg, #f4f8fc 0%, #eef3f8 100%);
+  color: #19324d;
 }
 
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
-nav {
-  width: 100%;
-  font-size: 12px;
-  text-align: center;
-  margin-top: 2rem;
+.eyebrow {
+  margin-bottom: 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5c7a99;
 }
 
-nav a.router-link-exact-active {
-  color: var(--color-text);
+h1 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
 }
 
-nav a.router-link-exact-active:hover {
-  background-color: transparent;
+.search-bar {
+  width: min(320px, 100%);
+  padding: 12px 14px;
+  border: 1px solid #c4d2e0;
+  border-radius: 12px;
+  background: #fff;
 }
 
-nav a {
-  display: inline-block;
-  padding: 0 1rem;
-  border-left: 1px solid var(--color-border);
+.main-content {
+  display: grid;
+  gap: 20px;
 }
 
-nav a:first-of-type {
+.domain-card {
+  padding: 20px;
+  border: 1px solid #d6e1ec;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 18px 40px rgba(53, 89, 122, 0.08);
+}
+
+.domain-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.domain-header h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.action-button {
+  padding: 10px 14px;
   border: 0;
+  border-radius: 10px;
+  background: #66a1cf;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
 }
 
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
+.todo-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.todo-table th,
+.todo-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid #e4ebf3;
+  text-align: left;
+}
+
+.todo-table th {
+  font-weight: 700;
+  color: #4b647d;
+}
+
+.empty-state {
+  text-align: center;
+  color: #6f859c;
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    padding: 20px;
   }
 
-  .logo {
-    margin: 0 2rem 0 0;
+  .header,
+  .domain-header {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  nav {
-    text-align: left;
-    margin-left: -1rem;
-    font-size: 1rem;
-
-    padding: 1rem 0;
-    margin-top: 1rem;
+  .todo-table {
+    display: block;
+    overflow-x: auto;
   }
 }
 </style>
-
-
