@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 
 const search = ref('')
@@ -23,6 +23,7 @@ const createTodoForm = () => ({
 const draftFilters = ref(createFilters())
 const activeFilters = ref(createFilters())
 const showTodoModal = ref(false)
+const showDomainModal = ref(false)
 const activeDomainId = ref(null)
 const activeTodoId = ref(null)
 const filterPanel = reactive({
@@ -32,6 +33,13 @@ const filterPanel = reactive({
   height: 590,
 })
 const todoForm = reactive(createTodoForm())
+const domainForm = reactive({
+  name: '',
+  description: '',
+})
+const showDeleteDomainModal = ref(false)
+const deletingDomainId = ref(null)
+const todoTransferDecisions = ref([])
 
 let dragState = null
 let resizeState = null
@@ -211,14 +219,38 @@ function startFilterResizeLeft(event) {
   window.addEventListener('mouseup', stopFilterResize)
 }
 
-function addDomain() {
-  const name = window.prompt('Name für den neuen Bereich eingeben:')
+function deleteDomain(domainId) {
+  const domain = domains.value.find(d => d.id === domainId)
+  if (!domain) return
 
-  if (!name) {
+  if (domain.toDos.length === 0 || domains.value.length === 1) {
+    domains.value = domains.value.filter(d => d.id !== domainId)
     return
   }
 
-  const trimmedName = name.trim()
+  deletingDomainId.value = domainId
+  todoTransferDecisions.value = domain.toDos.map(todo => ({
+    todoId: todo.id,
+    action: 'transfer',
+    targetDomainId: domains.value.find(d => d.id !== domainId)?.id
+  }))
+  showDeleteDomainModal.value = true
+}
+
+function addDomain() {
+  domainForm.name = ''
+  domainForm.description = ''
+  showDomainModal.value = true
+}
+
+function closeDomainModal() {
+  showDomainModal.value = false
+  domainForm.name = ''
+  domainForm.description = ''
+}
+
+function saveDomain() {
+  const trimmedName = domainForm.name.trim()
 
   if (!trimmedName) {
     return
@@ -227,8 +259,11 @@ function addDomain() {
   domains.value.push({
     id: Date.now(),
     name: trimmedName,
+    description: domainForm.description.trim(),
     toDos: [],
   })
+
+  closeDomainModal()
 }
 
 function openTodoModal(domainId) {
@@ -337,6 +372,58 @@ function deleteTodo() {
   closeTodoModal()
 }
 
+function getDeletingDomain() {
+  return domains.value.find(d => d.id === deletingDomainId.value)
+}
+
+function getOtherDomains() {
+  return domains.value.filter(d => d.id !== deletingDomainId.value)
+}
+
+function getTodoTitle(todoId) {
+  const domain = getDeletingDomain()
+  const todo = domain?.toDos.find(t => t.id === todoId)
+  return todo?.title || ''
+}
+
+function setTransfer(decision, targetId) {
+  decision.action = 'transfer'
+  decision.targetDomainId = targetId
+}
+
+function setDelete(decision) {
+  decision.action = 'delete'
+  decision.targetDomainId = null
+}
+
+function cancelDeleteDomain() {
+  showDeleteDomainModal.value = false
+  deletingDomainId.value = null
+  todoTransferDecisions.value = []
+}
+
+function confirmDeleteDomain() {
+  const domain = getDeletingDomain()
+  if (!domain) return
+
+  for (const decision of todoTransferDecisions.value) {
+    if (decision.action === 'transfer') {
+      const targetDomain = domains.value.find(d => d.id === decision.targetDomainId)
+      if (targetDomain) {
+        const todo = domain.toDos.find(t => t.id === decision.todoId)
+        if (todo) {
+          targetDomain.toDos.push({ ...todo })
+        }
+      }
+    }
+  }
+
+  domains.value = domains.value.filter(d => d.id !== deletingDomainId.value)
+  showDeleteDomainModal.value = false
+  deletingDomainId.value = null
+  todoTransferDecisions.value = []
+}
+
 onBeforeUnmount(() => {
   stopFilterDrag()
   stopFilterResize()
@@ -376,6 +463,34 @@ onBeforeUnmount(() => {
           <span>Bereich hinzufügen</span>
           <span class="toolbar-plus">+</span>
         </button>
+      </section>
+
+      <section v-if="showDomainModal" class="domain-modal-backdrop" @click.self="closeDomainModal">
+        <div class="domain-modal">
+          <div class="domain-modal-header">
+            <h2>Bereich hinzufügen</h2>
+            <button type="button" class="domain-modal-close" @click="closeDomainModal" aria-label="Popup schliessen">
+              X
+            </button>
+          </div>
+
+          <div class="domain-form">
+            <label class="domain-field">
+              <span>Name:</span>
+              <input v-model="domainForm.name" type="text" placeholder="Name eingeben" />
+            </label>
+
+            <label class="domain-field">
+              <span>Beschreibung:</span>
+              <textarea v-model="domainForm.description" rows="4" placeholder="Beschreibung eingeben"></textarea>
+            </label>
+          </div>
+
+          <div class="domain-modal-actions">
+            <button type="button" class="domain-modal-cancel" @click="closeDomainModal">Abbrechen</button>
+            <button type="button" class="domain-modal-save" @click="saveDomain">Speichern</button>
+          </div>
+        </div>
       </section>
 
       <section
@@ -457,9 +572,16 @@ onBeforeUnmount(() => {
 
       <section v-for="domain in filteredDomains" :key="domain.id" class="domain-card">
         <div class="domain-header">
-          <h2>{{ domain.name }}</h2>
 
-          <button type="button" class="TaskADD" @click="openTodoModal(domain.id)">Todo hinzufügen</button>
+          <div class="domain-title">
+            <h2>{{ domain.name }}</h2>
+            <button type="button" class="domain-delete" @click="deleteDomain(domain.id)" aria-label="Bereich löschen">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 6h18v2H3V6zm2 2h14v14c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V8zm3 2v10h2V10H8zm4 0v10h2V10h-2z"/>
+              </svg>
+            </button>
+          </div>
+          <button type="button" class="TaskADD" @click="openTodoModal(domain.id)">Todo Hinzufügen</button>
         </div>
 
         <table class="todo-table">
@@ -552,8 +674,49 @@ onBeforeUnmount(() => {
 
           <div class="todo-modal-actions">
             <button v-if="activeTodoId" type="button" class="todo-modal-delete" @click="deleteTodo">Löschen</button>
-            <button type="button" class="todo-modal-cancel" @click="closeTodoModal">Schliessen</button>
+            <button type="button" class="todo-modal-cancel" @click="closeTodoModal">Abbrechen</button>
             <button type="button" class="todo-modal-save" @click="saveTodo">Anwenden</button>
+          </div>
+        </div>
+      </section>
+
+      <section v-if="showDeleteDomainModal" class="delete-domain-modal-backdrop" @click.self="cancelDeleteDomain">
+        <div class="delete-domain-modal">
+          <div class="delete-domain-modal-header">
+            <h2>Bereich "{{ getDeletingDomain()?.name }}" löschen</h2>
+            <button type="button" class="delete-domain-modal-close" @click="cancelDeleteDomain" aria-label="Abbrechen">
+              X
+            </button>
+          </div>
+          <div class="delete-domain-modal-body">
+            <p>Dieser Bereich enthält Todos. Wohin sollen sie verschoben werden?</p>
+            <div v-for="decision in todoTransferDecisions" :key="decision.todoId" class="todo-transfer-item">
+              <span class="todo-title">{{ getTodoTitle(decision.todoId) }}</span>
+              <div class="transfer-options">
+                <button
+                  v-for="otherDomain in getOtherDomains()"
+                  :key="otherDomain.id"
+                  type="button"
+                  class="transfer-button"
+                  :class="{ active: decision.targetDomainId === otherDomain.id && decision.action === 'transfer' }"
+                  @click="setTransfer(decision, otherDomain.id)"
+                >
+                  {{ otherDomain.name }}
+                </button>
+                <button
+                  type="button"
+                  class="delete-button"
+                  :class="{ active: decision.action === 'delete' }"
+                  @click="setDelete(decision)"
+                >
+                  Löschen
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="delete-domain-modal-actions">
+            <button type="button" class="cancel-button" @click="cancelDeleteDomain">Abbrechen</button>
+            <button type="button" class="confirm-button" @click="confirmDeleteDomain">Bereich löschen</button>
           </div>
         </div>
       </section>
@@ -857,10 +1020,117 @@ onBeforeUnmount(() => {
   min-height: 42px;
   border: 1px solid #aeb8c2;
   border-radius: 999px;
-  background: #ffffff;
+  background: #f1f3f5;
   color: #6d6d6d;
   font-size: 1rem;
   cursor: pointer;
+}
+
+.domain-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(25, 50, 77, 0.22);
+}
+
+.domain-modal {
+  width: min(420px, 100%);
+  padding: 20px;
+  border: 1px solid #c9d3dd;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(25, 50, 77, 0.18);
+}
+
+.domain-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.domain-modal-header h2 {
+  margin: 0;
+  font-size: 1.4rem;
+  color: #4b647d;
+}
+
+.domain-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #aeb8c2;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #6d6d6d;
+  cursor: pointer;
+}
+
+.domain-form {
+  display: grid;
+  gap: 14px;
+}
+
+.domain-field {
+  display: grid;
+  gap: 8px;
+}
+
+.domain-field span {
+  color: #6d6d6d;
+}
+
+.domain-field input,
+.domain-field textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 12px 16px;
+  border: 1px solid #aeb8c2;
+  border-radius: 18px;
+  background: #ffffff;
+  color: #485869;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+
+.domain-field textarea {
+  resize: vertical;
+  min-height: 110px;
+}
+
+.domain-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.domain-modal-cancel,
+.domain-modal-save {
+  min-width: 120px;
+  min-height: 42px;
+  border-radius: 999px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.domain-modal-cancel {
+  border: 1px solid #aeb8c2;
+  background: #f1f3f5;
+  color: #6d6d6d;
+}
+
+.domain-modal-save {
+  border: 1px solid #aeb8c2;
+  background: #f1f3f5;
+  color: #6d6d6d;
 }
 
 .todo-modal-backdrop {
@@ -1115,4 +1385,178 @@ onBeforeUnmount(() => {
     overflow-x: auto;
   }
 }
+
+.domain-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.domain-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  color: #d32f2f;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.domain-delete:hover {
+  background: rgba(211, 47, 47, 0.1);
+}
+
+.domain-delete svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.delete-domain-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.delete-domain-modal {
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.delete-domain-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.delete-domain-modal-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #19324d;
+}
+
+.delete-domain-modal-close {
+  background: transparent;
+  border: 0;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #666;
+}
+
+.delete-domain-modal-body {
+  padding: 20px;
+}
+
+.delete-domain-modal-body p {
+  margin: 0 0 20px 0;
+  color: #19324d;
+}
+
+.todo-transfer-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.todo-transfer-item:last-child {
+  border-bottom: 0;
+}
+
+.todo-title {
+  font-weight: 500;
+  color: #19324d;
+  flex: 1;
+}
+
+.transfer-options {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.transfer-button,
+.delete-button {
+  padding: 6px 12px;
+  border: 1px solid #ccc;
+  background: #f9f9f9;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.transfer-button:hover,
+.delete-button:hover {
+  background: #e0e0e0;
+}
+
+.transfer-button.active {
+  background: #6fa1cf;
+  color: white;
+  border-color: #6fa1cf;
+}
+
+.delete-button.active {
+  background: #d32f2f;
+  color: white;
+  border-color: #d32f2f;
+}
+
+.delete-domain-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 20px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.cancel-button {
+  padding: 10px 20px;
+  border: 1px solid #ccc;
+  background: #f9f9f9;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.cancel-button:hover {
+  background: #e0e0e0;
+}
+
+.confirm-button {
+  padding: 10px 20px;
+  border: 0;
+  background: #d32f2f;
+  color: white;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.confirm-button:hover {
+  background: #b71c1c;
+}
 </style>
+
+
