@@ -32,6 +32,9 @@ const filterPanel = reactive({
   height: 590,
 })
 const todoForm = reactive(createTodoForm())
+const showDeleteDomainModal = ref(false)
+const deletingDomainId = ref(null)
+const todoTransferDecisions = ref([])
 
 let dragState = null
 let resizeState = null
@@ -243,6 +246,24 @@ function addDomain() {
   })
 }
 
+function deleteDomain(domainId) {
+  const domain = domains.value.find(d => d.id === domainId)
+  if (!domain) return
+
+  if (domain.toDos.length === 0 || domains.value.length === 1) {
+    domains.value = domains.value.filter(d => d.id !== domainId)
+    return
+  }
+
+  deletingDomainId.value = domainId
+  todoTransferDecisions.value = domain.toDos.map(todo => ({
+    todoId: todo.id,
+    action: 'transfer',
+    targetDomainId: domains.value.find(d => d.id !== domainId)?.id
+  }))
+  showDeleteDomainModal.value = true
+}
+
 function openTodoModal(domainId) {
   activeDomainId.value = domainId
   activeTodoId.value = null
@@ -323,6 +344,58 @@ function deleteTodo() {
 
   domain.toDos = domain.toDos.filter((entry) => entry.id !== activeTodoId.value)
   closeTodoModal()
+}
+
+function getDeletingDomain() {
+  return domains.value.find(d => d.id === deletingDomainId.value)
+}
+
+function getOtherDomains() {
+  return domains.value.filter(d => d.id !== deletingDomainId.value)
+}
+
+function getTodoTitle(todoId) {
+  const domain = getDeletingDomain()
+  const todo = domain?.toDos.find(t => t.id === todoId)
+  return todo?.title || ''
+}
+
+function setTransfer(decision, targetId) {
+  decision.action = 'transfer'
+  decision.targetDomainId = targetId
+}
+
+function setDelete(decision) {
+  decision.action = 'delete'
+  decision.targetDomainId = null
+}
+
+function cancelDeleteDomain() {
+  showDeleteDomainModal.value = false
+  deletingDomainId.value = null
+  todoTransferDecisions.value = []
+}
+
+function confirmDeleteDomain() {
+  const domain = getDeletingDomain()
+  if (!domain) return
+
+  for (const decision of todoTransferDecisions.value) {
+    if (decision.action === 'transfer') {
+      const targetDomain = domains.value.find(d => d.id === decision.targetDomainId)
+      if (targetDomain) {
+        const todo = domain.toDos.find(t => t.id === decision.todoId)
+        if (todo) {
+          targetDomain.toDos.push({ ...todo })
+        }
+      }
+    }
+  }
+
+  domains.value = domains.value.filter(d => d.id !== deletingDomainId.value)
+  showDeleteDomainModal.value = false
+  deletingDomainId.value = null
+  todoTransferDecisions.value = []
 }
 
 onBeforeUnmount(() => {
@@ -445,8 +518,14 @@ onBeforeUnmount(() => {
 
       <section v-for="domain in filteredDomains" :key="domain.id" class="domain-card">
         <div class="domain-header">
-          <h2>{{ domain.name }}</h2>
-
+          <div class="domain-title">
+            <h2>{{ domain.name }}</h2>
+            <button type="button" class="domain-delete" @click="deleteDomain(domain.id)" aria-label="Bereich loeschen">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 6h18v2H3V6zm2 2h14v14c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V8zm3 2v10h2V10H8zm4 0v10h2V10h-2z"/>
+              </svg>
+            </button>
+          </div>
           <button type="button" class="TaskADD" @click="openTodoModal(domain.id)">Todo Hinzufuegen</button>
         </div>
 
@@ -528,6 +607,47 @@ onBeforeUnmount(() => {
             <button v-if="activeTodoId" type="button" class="todo-modal-delete" @click="deleteTodo">Delete</button>
             <button type="button" class="todo-modal-cancel" @click="closeTodoModal">Close</button>
             <button type="button" class="todo-modal-save" @click="saveTodo">Save</button>
+          </div>
+        </div>
+      </section>
+
+      <section v-if="showDeleteDomainModal" class="delete-domain-modal-backdrop" @click.self="cancelDeleteDomain">
+        <div class="delete-domain-modal">
+          <div class="delete-domain-modal-header">
+            <h2>Bereich "{{ getDeletingDomain()?.name }}" loeschen</h2>
+            <button type="button" class="delete-domain-modal-close" @click="cancelDeleteDomain" aria-label="Abbrechen">
+              X
+            </button>
+          </div>
+          <div class="delete-domain-modal-body">
+            <p>Dieser Bereich enthaelt Todos. Wohin sollen sie verschoben werden?</p>
+            <div v-for="decision in todoTransferDecisions" :key="decision.todoId" class="todo-transfer-item">
+              <span class="todo-title">{{ getTodoTitle(decision.todoId) }}</span>
+              <div class="transfer-options">
+                <button
+                  v-for="otherDomain in getOtherDomains()"
+                  :key="otherDomain.id"
+                  type="button"
+                  class="transfer-button"
+                  :class="{ active: decision.targetDomainId === otherDomain.id && decision.action === 'transfer' }"
+                  @click="setTransfer(decision, otherDomain.id)"
+                >
+                  {{ otherDomain.name }}
+                </button>
+                <button
+                  type="button"
+                  class="delete-button"
+                  :class="{ active: decision.action === 'delete' }"
+                  @click="setDelete(decision)"
+                >
+                  Loeschen
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="delete-domain-modal-actions">
+            <button type="button" class="cancel-button" @click="cancelDeleteDomain">Abbrechen</button>
+            <button type="button" class="confirm-button" @click="confirmDeleteDomain">Bereich loeschen</button>
           </div>
         </div>
       </section>
@@ -1062,5 +1182,177 @@ onBeforeUnmount(() => {
     display: block;
     overflow-x: auto;
   }
+}
+
+.domain-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.domain-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  color: #d32f2f;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.domain-delete:hover {
+  background: rgba(211, 47, 47, 0.1);
+}
+
+.domain-delete svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.delete-domain-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.delete-domain-modal {
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.delete-domain-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.delete-domain-modal-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #19324d;
+}
+
+.delete-domain-modal-close {
+  background: transparent;
+  border: 0;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #666;
+}
+
+.delete-domain-modal-body {
+  padding: 20px;
+}
+
+.delete-domain-modal-body p {
+  margin: 0 0 20px 0;
+  color: #19324d;
+}
+
+.todo-transfer-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.todo-transfer-item:last-child {
+  border-bottom: 0;
+}
+
+.todo-title {
+  font-weight: 500;
+  color: #19324d;
+  flex: 1;
+}
+
+.transfer-options {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.transfer-button,
+.delete-button {
+  padding: 6px 12px;
+  border: 1px solid #ccc;
+  background: #f9f9f9;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.transfer-button:hover,
+.delete-button:hover {
+  background: #e0e0e0;
+}
+
+.transfer-button.active {
+  background: #6fa1cf;
+  color: white;
+  border-color: #6fa1cf;
+}
+
+.delete-button.active {
+  background: #d32f2f;
+  color: white;
+  border-color: #d32f2f;
+}
+
+.delete-domain-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 20px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.cancel-button {
+  padding: 10px 20px;
+  border: 1px solid #ccc;
+  background: #f9f9f9;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.cancel-button:hover {
+  background: #e0e0e0;
+}
+
+.confirm-button {
+  padding: 10px 20px;
+  border: 0;
+  background: #d32f2f;
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.confirm-button:hover {
+  background: #b71c1c;
 }
 </style>
