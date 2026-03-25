@@ -336,7 +336,14 @@ function saveDomain() {
   closeDomainModal()
 }
 
-function toggleDomainLock(domain) {
+function toggleDomainLock(domainOrId) {
+  const domainId = typeof domainOrId === 'object' ? domainOrId.id : domainOrId
+  const domain = findDomainById(domainId)
+
+  if (!domain) {
+    return
+  }
+
   if (!domain.isProtected) {
     return
   }
@@ -746,7 +753,7 @@ onBeforeUnmount(() => {
               type="button"
               class="domain-lock"
               :class="{ unlocked: !isDomainLocked(domain) }"
-              @click="toggleDomainLock(domain)"
+              @click="toggleDomainLock(domain.id)"
               :aria-label="isDomainLocked(domain) ? 'Bereich entsperren' : 'Bereich sperren'"
             >
               {{ isDomainLocked(domain) ? '🔒' : '🔓' }}
