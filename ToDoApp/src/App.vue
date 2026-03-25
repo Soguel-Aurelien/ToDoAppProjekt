@@ -38,41 +38,29 @@ let resizeState = null
 
 const priorityOptions = ['Hoch', 'Mittel', 'Niedrig']
 const statusOptions = ['Offen', 'In Arbeit', 'Erledigt']
+const toneByPriority = {
+  Hoch: 'is-red',
+  Mittel: 'is-yellow',
+  Niedrig: 'is-green',
+}
+const toneByStatus = {
+  Offen: 'is-red',
+  'In Arbeit': 'is-yellow',
+  Erledigt: 'is-green',
+}
 
 const domains = ref([
   {
     id: 1,
-    name: 'Schule',
+    name: 'Beispiel',
     toDos: [
       {
         id: 1,
-        title: 'Praesentation fertigstellen',
-        description: 'Folien pruefen und Quellen ergaenzen',
+        title: 'Test123',
+        description: 'Lorem Ipsum',
         endDate: '2026-03-21',
         priority: 'Hoch',
-        status: 'Offen',
-      },
-      {
-        id: 2,
-        title: 'Mathe ueben',
-        description: 'Zwei Aufgabenblaetter rechnen',
-        endDate: '2026-03-19',
-        priority: 'Mittel',
         status: 'In Arbeit',
-      },
-    ],
-  },
-  {
-    id: 2,
-    name: 'Privat',
-    toDos: [
-      {
-        id: 3,
-        title: 'Einkaufen',
-        description: 'Milch, Brot, Gemuese',
-        endDate: '2026-03-18',
-        priority: 'Niedrig',
-        status: 'Offen',
       },
     ],
   },
@@ -224,7 +212,7 @@ function startFilterResizeLeft(event) {
 }
 
 function addDomain() {
-  const name = window.prompt('Name fuer den neuen Bereich eingeben:')
+  const name = window.prompt('Name für den neuen Bereich eingeben:')
 
   if (!name) {
     return
@@ -286,6 +274,30 @@ function getTodoPayload() {
     priority: todoForm.priority,
     status: todoForm.status,
   }
+}
+
+function getPriorityTone(priority) {
+  return toneByPriority[priority] ?? ''
+}
+
+function getStatusTone(status) {
+  return toneByStatus[status] ?? ''
+}
+
+function getToneOptionStyle(tone) {
+  if (tone === 'is-red') {
+    return { backgroundColor: '#ff0000', color: '#ffffff' }
+  }
+
+  if (tone === 'is-yellow') {
+    return { backgroundColor: '#ffe600', color: '#2d2d2d' }
+  }
+
+  if (tone === 'is-green') {
+    return { backgroundColor: '#11ff09', color: '#143014' }
+  }
+
+  return {}
 }
 
 function saveTodo() {
@@ -361,7 +373,7 @@ onBeforeUnmount(() => {
     <main class="main-content">
       <section class="toolbar-row">
         <button type="button" class="toolbar-link" @click="addDomain">
-          <span>Bereich hinzufuegen</span>
+          <span>Bereich hinzufügen</span>
           <span class="toolbar-plus">+</span>
         </button>
       </section>
@@ -404,7 +416,7 @@ onBeforeUnmount(() => {
             </label>
 
             <label class="filter-field">
-              <span>Prioritaet:</span>
+              <span>Priorität:</span>
               <select v-model="draftFilters.priority">
                 <option value="">Alle</option>
                 <option v-for="priority in priorityOptions" :key="priority" :value="priority">
@@ -447,7 +459,7 @@ onBeforeUnmount(() => {
         <div class="domain-header">
           <h2>{{ domain.name }}</h2>
 
-          <button type="button" class="TaskADD" @click="openTodoModal(domain.id)">Todo Hinzufuegen</button>
+          <button type="button" class="TaskADD" @click="openTodoModal(domain.id)">Todo hinzufügen</button>
         </div>
 
         <table class="todo-table">
@@ -456,7 +468,7 @@ onBeforeUnmount(() => {
               <th>Titel</th>
               <th>Beschreibung</th>
               <th>Enddatum</th>
-              <th>Prioritaet</th>
+              <th>Priorität</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -470,11 +482,15 @@ onBeforeUnmount(() => {
               <td>{{ todo.title }}</td>
               <td>{{ todo.description }}</td>
               <td>{{ todo.endDate }}</td>
-              <td>{{ todo.priority }}</td>
-              <td>{{ todo.status }}</td>
+              <td>
+                <span class="tone-pill" :class="getPriorityTone(todo.priority)">{{ todo.priority }}</span>
+              </td>
+              <td>
+                <span class="tone-pill" :class="getStatusTone(todo.status)">{{ todo.status }}</span>
+              </td>
             </tr>
             <tr v-if="domain.toDos.length === 0">
-              <td colspan="5" class="empty-state">Keine Eintraege fuer diese Suche.</td>
+              <td colspan="5" class="empty-state">Keine Einträge für diese Suche.</td>
             </tr>
           </tbody>
         </table>
@@ -506,9 +522,14 @@ onBeforeUnmount(() => {
             </label>
 
             <label class="todo-field">
-              <span>Prioritaet:</span>
+              <span>Priorität:</span>
               <select v-model="todoForm.priority">
-                <option v-for="priority in priorityOptions" :key="priority" :value="priority">
+                <option
+                  v-for="priority in priorityOptions"
+                  :key="priority"
+                  :value="priority"
+                  :style="getToneOptionStyle(getPriorityTone(priority))"
+                >
                   {{ priority }}
                 </option>
               </select>
@@ -517,7 +538,12 @@ onBeforeUnmount(() => {
             <label class="todo-field">
               <span>Status:</span>
               <select v-model="todoForm.status">
-                <option v-for="status in statusOptions" :key="status" :value="status">
+                <option
+                  v-for="status in statusOptions"
+                  :key="status"
+                  :value="status"
+                  :style="getToneOptionStyle(getStatusTone(status))"
+                >
                   {{ status }}
                 </option>
               </select>
@@ -525,9 +551,9 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="todo-modal-actions">
-            <button v-if="activeTodoId" type="button" class="todo-modal-delete" @click="deleteTodo">Delete</button>
-            <button type="button" class="todo-modal-cancel" @click="closeTodoModal">Close</button>
-            <button type="button" class="todo-modal-save" @click="saveTodo">Save</button>
+            <button v-if="activeTodoId" type="button" class="todo-modal-delete" @click="deleteTodo">Löschen</button>
+            <button type="button" class="todo-modal-cancel" @click="closeTodoModal">Schliessen</button>
+            <button type="button" class="todo-modal-save" @click="saveTodo">Anwenden</button>
           </div>
         </div>
       </section>
@@ -937,19 +963,19 @@ onBeforeUnmount(() => {
 
 .todo-modal-cancel {
   border: 1px solid #aeb8c2;
-  background: #ffffff;
+  background: #f1f3f5;
   color: #6d6d6d;
 }
 
 .todo-modal-save {
-  border: 0;
-  background: #66a1cf;
-  color: #ffffff;
+  border: 1px solid #d3d8de;
+  background: #f1f3f5;
+  color: #6d6d6d;
 }
 
 .todo-modal-delete {
   border: 0;
-  background: #d46f6f;
+  background: #ff0000;
   color: #ffffff;
 }
 
@@ -994,6 +1020,32 @@ onBeforeUnmount(() => {
   padding: 12px 10px;
   border-bottom: 1px solid #e4ebf3;
   text-align: left;
+}
+
+.tone-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.is-red {
+  background: #ff0000;
+  color: #ffffff;
+}
+
+.is-yellow {
+  background: #ffe600;
+  color: #2d2d2d;
+}
+
+.is-green {
+  background: #11ff09;
+  color: #143014;
 }
 
 .todo-table th {
