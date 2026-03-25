@@ -1298,7 +1298,7 @@ onBeforeUnmount(() => {
   padding: 6px 12px;
   border: 1px solid #ccc;
   background: #f9f9f9;
-  border-radius: 4px;
+  border-radius: 999px;
   cursor: pointer;
   font-size: 0.9rem;
   transition: all 0.2s;
@@ -1333,7 +1333,7 @@ onBeforeUnmount(() => {
   padding: 10px 20px;
   border: 1px solid #ccc;
   background: #f9f9f9;
-  border-radius: 4px;
+  border-radius: 999px;
   cursor: pointer;
   font-size: 1rem;
 }
@@ -1347,7 +1347,7 @@ onBeforeUnmount(() => {
   border: 0;
   background: #d32f2f;
   color: white;
-  border-radius: 4px;
+  border-radius: 999px;
   cursor: pointer;
   font-size: 1rem;
 }
