@@ -12,6 +12,14 @@ const createFilters = () => ({
   status: '',
 })
 
+const createTodoForm = () => ({
+  title: '',
+  description: '',
+  endDate: '',
+  priority: 'Mittel',
+  status: 'Offen',
+})
+
 const draftFilters = ref(createFilters())
 const activeFilters = ref(createFilters())
 const showTodoModal = ref(false)
@@ -23,13 +31,7 @@ const filterPanel = reactive({
   width: 380,
   height: 590,
 })
-const todoForm = reactive({
-  title: '',
-  description: '',
-  endDate: '',
-  priority: 'Mittel',
-  status: 'Offen',
-})
+const todoForm = reactive(createTodoForm())
 
 let dragState = null
 let resizeState = null
@@ -79,18 +81,23 @@ const domains = ref([
 const filteredDomains = computed(() => {
   const query = search.value.trim().toLowerCase()
   const filters = activeFilters.value
+  const hasTodoFilters = [query, filters.title, filters.date, filters.priority, filters.status].some(Boolean)
 
   return domains.value
     .map((domain) => ({
       ...domain,
       toDos: domain.toDos.filter((todo) => matchesSearch(todo, query) && matchesFilters(todo, domain, filters)),
     }))
-    .filter(
-      (domain) =>
-        matchesDomainSearch(domain, query) &&
-        matchesDomainFilter(domain, filters) &&
-        (domain.toDos.length > 0 || shouldKeepEmptyDomain(domain, query, filters)),
-    )
+    .filter((domain) => {
+      const domainMatches = !filters.domain || domain.name.toLowerCase().includes(filters.domain.toLowerCase())
+      const searchMatches = !query || domain.name.toLowerCase().includes(query) || domain.toDos.length > 0
+
+      if (!domainMatches || !searchMatches) {
+        return false
+      }
+
+      return domain.toDos.length > 0 || !hasTodoFilters
+    })
 })
 
 function matchesSearch(todo, query) {
@@ -112,41 +119,6 @@ function matchesFilters(todo, domain, filters) {
   const statusMatch = !filters.status || todo.status === filters.status
 
   return titleMatch && domainMatch && dateMatch && priorityMatch && statusMatch
-}
-
-function matchesDomainSearch(domain, query) {
-  if (!query) {
-    return true
-  }
-
-  return domain.name.toLowerCase().includes(query) || domain.toDos.length > 0
-}
-
-function matchesDomainFilter(domain, filters) {
-  if (!filters.domain) {
-    return true
-  }
-
-  return domain.name.toLowerCase().includes(filters.domain.toLowerCase())
-}
-
-function shouldKeepEmptyDomain(domain, query, filters) {
-  const hasTodoFilters =
-    Boolean(query) ||
-    Boolean(filters.title) ||
-    Boolean(filters.date) ||
-    Boolean(filters.priority) ||
-    Boolean(filters.status)
-
-  if (hasTodoFilters) {
-    return false
-  }
-
-  if (!filters.domain) {
-    return true
-  }
-
-  return domain.name.toLowerCase().includes(filters.domain.toLowerCase())
 }
 
 function applyFilters() {
@@ -281,11 +253,7 @@ function openTodoModal(domainId) {
 function openEditTodoModal(domainId, todo) {
   activeDomainId.value = domainId
   activeTodoId.value = todo.id
-  todoForm.title = todo.title
-  todoForm.description = todo.description
-  todoForm.endDate = todo.endDate
-  todoForm.priority = todo.priority
-  todoForm.status = todo.status
+  Object.assign(todoForm, todo)
   showTodoModal.value = true
 }
 
@@ -296,79 +264,58 @@ function closeTodoModal() {
 }
 
 function resetTodoForm() {
-  todoForm.title = ''
-  todoForm.description = ''
-  todoForm.endDate = ''
-  todoForm.priority = 'Mittel'
-  todoForm.status = 'Offen'
+  Object.assign(todoForm, createTodoForm())
 }
 
-function addTodo() {
-  const domain = domains.value.find((entry) => entry.id === activeDomainId.value)
+function getActiveDomain() {
+  return domains.value.find((entry) => entry.id === activeDomainId.value)
+}
 
-  if (!domain) {
-    return
-  }
-
+function getTodoPayload() {
   const title = todoForm.title.trim()
   const description = todoForm.description.trim()
 
   if (!title || !description || !todoForm.endDate) {
-    return
+    return null
   }
 
-  domain.toDos.push({
-    id: Date.now(),
+  return {
     title,
     description,
     endDate: todoForm.endDate,
     priority: todoForm.priority,
     status: todoForm.status,
-  })
-
-  closeTodoModal()
+  }
 }
 
 function saveTodo() {
+  const domain = getActiveDomain()
+  const payload = getTodoPayload()
+
+  if (!domain || !payload) {
+    return
+  }
+
   if (activeTodoId.value) {
-    updateTodo()
-    return
+    const todo = domain.toDos.find((entry) => entry.id === activeTodoId.value)
+
+    if (!todo) {
+      return
+    }
+
+    Object.assign(todo, payload)
+  } else {
+    domain.toDos.push({
+      id: Date.now(),
+      ...payload,
+    })
   }
-
-  addTodo()
-}
-
-function updateTodo() {
-  const domain = domains.value.find((entry) => entry.id === activeDomainId.value)
-
-  if (!domain) {
-    return
-  }
-
-  const todo = domain.toDos.find((entry) => entry.id === activeTodoId.value)
-
-  if (!todo) {
-    return
-  }
-
-  const title = todoForm.title.trim()
-  const description = todoForm.description.trim()
-
-  if (!title || !description || !todoForm.endDate) {
-    return
-  }
-
-  todo.title = title
-  todo.description = description
-  todo.endDate = todoForm.endDate
-  todo.priority = todoForm.priority
-  todo.status = todoForm.status
 
   closeTodoModal()
 }
 
 function deleteTodo() {
-  const domain = domains.value.find((entry) => entry.id === activeDomainId.value)
+  const domain = getActiveDomain()
 
   if (!domain || !activeTodoId.value) {
     return
@@ -387,10 +334,8 @@ onBeforeUnmount(() => {
 <template>
   <div class="app-shell">
     <header class="top-nav">
-      <div class="nav-spacer"></div>
-
       <div class="brand" aria-label="ToDo Startseite">
-        <h1>ToDo</h1>
+        <h1 class="brand-title">ToDo</h1>
         <img src="/img/logo.png" alt="ToDo Logo" class="brand-logo" />
       </div>
 
@@ -592,12 +537,20 @@ onBeforeUnmount(() => {
 
 <style scoped>
 @font-face {
-  font-family: "supercroissant";
-  src: url("..\Font\super_croissant") format("supercroissant");
+  font-family: 'Super Croissant';
+  src: url('../Font/super_croissant/Super%20Croissant.ttf') format('truetype');
+  font-display: swap;
 }
 
-.h1{
-  font-family: supercroissant;
+.brand-title {
+  margin: 0;
+  margin-right: -24px;
+  font-family: 'Super Croissant', cursive;
+  font-size: clamp(4rem, 5.6vw, 5.8rem);
+  line-height: 0.9;
+  font-weight: 400;
+  color: #1d4678;
+  letter-spacing: 0.01em;
 }
 .app-shell {
   min-height: 100vh;
@@ -606,10 +559,10 @@ onBeforeUnmount(() => {
 }
 
 .top-nav {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  position: relative;
+  display: flex;
   align-items: center;
-  gap: 20px;
+  justify-content: flex-end;
   min-height: 124px;
   padding: 8px 52px;
   background: #6fa1cf;
@@ -617,27 +570,27 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-.nav-spacer {
-  min-height: 1px;
-}
-
 .nav-right {
-  justify-self: end;
   display: flex;
   align-items: center;
   gap: 14px;
 }
 
 .brand {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   justify-content: center;
   align-items: center;
+  gap: 0;
   min-height: 104px;
 }
 
 .brand-logo {
-  width: min(360px, 40vw);
-  max-height: 96px;
+  width: min(210px, 22vw);
+  max-height: 92px;
+  margin-left: -22px;
   height: auto;
   display: block;
   object-fit: contain;
@@ -1063,14 +1016,14 @@ onBeforeUnmount(() => {
 
 @media (max-width: 980px) {
   .top-nav {
-    grid-template-columns: 1fr;
-    justify-items: center;
+    justify-content: center;
     min-height: auto;
     padding: 20px 24px;
   }
 
-  .nav-spacer {
-    display: none;
+  .brand {
+    position: static;
+    transform: none;
   }
 
   .nav-search {
@@ -1078,16 +1031,12 @@ onBeforeUnmount(() => {
     height: 54px;
   }
 
-  .nav-right {
-    justify-self: center;
-  }
-
   .nav-filter-toggle {
     flex: 0 0 auto;
   }
 
   .brand-logo {
-    width: min(360px, 72vw);
+    width: min(235px, 58vw);
   }
 }
 
