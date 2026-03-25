@@ -1,5 +1,7 @@
 ﻿<script setup>
 import { computed, onBeforeUnmount, reactive, ref } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useTodoStore } from './stores/todo'
 
 const search = ref('')
 const showFilters = ref(false)
@@ -15,6 +17,7 @@ const createFilters = () => ({
 const createTodoForm = () => ({
   title: '',
   description: '',
+  contactEmail: '',
   endDate: '',
   priority: 'Mittel',
   status: 'Offen',
@@ -36,10 +39,18 @@ const todoForm = reactive(createTodoForm())
 const domainForm = reactive({
   name: '',
   description: '',
+  isProtected: false,
+  password: '',
 })
 const showDeleteDomainModal = ref(false)
 const deletingDomainId = ref(null)
 const todoTransferDecisions = ref([])
+const todoFormError = ref('')
+const domainFormError = ref('')
+const showUnlockDomainModal = ref(false)
+const unlockingDomainId = ref(null)
+const unlockPassword = ref('')
+const unlockDomainError = ref('')
 
 let dragState = null
 let resizeState = null
@@ -57,22 +68,11 @@ const toneByStatus = {
   Erledigt: 'is-green',
 }
 
-const domains = ref([
-  {
-    id: 1,
-    name: 'Beispiel',
-    toDos: [
-      {
-        id: 1,
-        title: 'Test123',
-        description: 'Lorem Ipsum',
-        endDate: '2026-03-21',
-        priority: 'Hoch',
-        status: 'In Arbeit',
-      },
-    ],
-  },
-])
+const todoStore = useTodoStore()
+const { domains } = storeToRefs(todoStore)
+
+normalizeDomains()
+lockProtectedDomainsOnLoad()
 
 const filteredDomains = computed(() => {
   const query = search.value.trim().toLowerCase()
@@ -82,7 +82,9 @@ const filteredDomains = computed(() => {
   return domains.value
     .map((domain) => ({
       ...domain,
-      toDos: domain.toDos.filter((todo) => matchesSearch(todo, query) && matchesFilters(todo, domain, filters)),
+      toDos: isDomainLocked(domain)
+        ? []
+        : domain.toDos.filter((todo) => matchesSearch(todo, query) && matchesFilters(todo, domain, filters)),
     }))
     .filter((domain) => {
       const domainMatches = !filters.domain || domain.name.toLowerCase().includes(filters.domain.toLowerCase())
@@ -92,16 +94,48 @@ const filteredDomains = computed(() => {
         return false
       }
 
+      if (isDomainLocked(domain)) {
+        return !hasTodoFilters || domain.name.toLowerCase().includes(query)
+      }
+
       return domain.toDos.length > 0 || !hasTodoFilters
     })
 })
+
+function normalizeDomains() {
+  domains.value.forEach((domain) => {
+    if (typeof domain.isProtected !== 'boolean') {
+      domain.isProtected = false
+    }
+
+    if (typeof domain.password !== 'string') {
+      domain.password = ''
+    }
+
+    if (typeof domain.isUnlocked !== 'boolean') {
+      domain.isUnlocked = !domain.isProtected
+    }
+  })
+}
+
+function lockProtectedDomainsOnLoad() {
+  domains.value.forEach((domain) => {
+    if (domain.isProtected) {
+      domain.isUnlocked = false
+    }
+  })
+}
+
+function isDomainLocked(domain) {
+  return Boolean(domain.isProtected && !domain.isUnlocked)
+}
 
 function matchesSearch(todo, query) {
   if (!query) {
     return true
   }
 
-  return [todo.title, todo.description, todo.priority, todo.status, todo.endDate]
+  return [todo.title, todo.description, todo.contactEmail, todo.priority, todo.status, todo.endDate]
     .join(' ')
     .toLowerCase()
     .includes(query)
@@ -240,6 +274,9 @@ function deleteDomain(domainId) {
 function addDomain() {
   domainForm.name = ''
   domainForm.description = ''
+  domainForm.isProtected = false
+  domainForm.password = ''
+  domainFormError.value = ''
   showDomainModal.value = true
 }
 
@@ -247,26 +284,91 @@ function closeDomainModal() {
   showDomainModal.value = false
   domainForm.name = ''
   domainForm.description = ''
+  domainForm.isProtected = false
+  domainForm.password = ''
+  domainFormError.value = ''
 }
 
 function saveDomain() {
   const trimmedName = domainForm.name.trim()
+  const trimmedPassword = domainForm.password.trim()
 
   if (!trimmedName) {
+    domainFormError.value = 'Bitte einen Bereichsnamen eingeben.'
     return
   }
+
+  if (domainForm.isProtected && !trimmedPassword) {
+    domainFormError.value = 'Bitte ein Passwort fuer den geschuetzten Bereich festlegen.'
+    return
+  }
+
+  domainFormError.value = ''
 
   domains.value.push({
     id: Date.now(),
     name: trimmedName,
     description: domainForm.description.trim(),
+    isProtected: domainForm.isProtected,
+    password: domainForm.isProtected ? trimmedPassword : '',
+    isUnlocked: !domainForm.isProtected,
     toDos: [],
   })
 
   closeDomainModal()
 }
 
+function toggleDomainLock(domain) {
+  if (!domain.isProtected) {
+    return
+  }
+
+  if (domain.isUnlocked) {
+    domain.isUnlocked = false
+    return
+  }
+
+  unlockingDomainId.value = domain.id
+  unlockPassword.value = ''
+  unlockDomainError.value = ''
+  showUnlockDomainModal.value = true
+}
+
+function closeUnlockDomainModal() {
+  showUnlockDomainModal.value = false
+  unlockingDomainId.value = null
+  unlockPassword.value = ''
+  unlockDomainError.value = ''
+}
+
+function unlockDomain() {
+  const domain = domains.value.find(entry => entry.id === unlockingDomainId.value)
+
+  if (!domain) {
+    closeUnlockDomainModal()
+    return
+  }
+
+  if (unlockPassword.value !== domain.password) {
+    unlockDomainError.value = 'Falsches Passwort.'
+    return
+  }
+
+  domain.isUnlocked = true
+  closeUnlockDomainModal()
+}
+
 function openTodoModal(domainId) {
+  const domain = domains.value.find((entry) => entry.id === domainId)
+  if (!domain) {
+    return
+  }
+
+  if (isDomainLocked(domain)) {
+    toggleDomainLock(domain)
+    return
+  }
+
   activeDomainId.value = domainId
   activeTodoId.value = null
   resetTodoForm()
@@ -276,7 +378,10 @@ function openTodoModal(domainId) {
 function openEditTodoModal(domainId, todo) {
   activeDomainId.value = domainId
   activeTodoId.value = todo.id
+  resetTodoForm()
   Object.assign(todoForm, todo)
+  todoForm.contactEmail = todo.contactEmail ?? ''
+  todoFormError.value = ''
   showTodoModal.value = true
 }
 
@@ -284,6 +389,7 @@ function closeTodoModal() {
   showTodoModal.value = false
   activeDomainId.value = null
   activeTodoId.value = null
+  todoFormError.value = ''
 }
 
 function resetTodoForm() {
@@ -294,21 +400,77 @@ function getActiveDomain() {
   return domains.value.find((entry) => entry.id === activeDomainId.value)
 }
 
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+function parseContactEmails(value) {
+  return value
+    .split(/[;,]/)
+    .map(email => email.trim())
+    .filter(Boolean)
+}
+
+function formatContactEmails(value) {
+  return parseContactEmails(value).join(', ')
+}
+
 function getTodoPayload() {
   const title = todoForm.title.trim()
   const description = todoForm.description.trim()
+  const contactEmails = parseContactEmails(todoForm.contactEmail)
 
   if (!title || !description || !todoForm.endDate) {
+    todoFormError.value = 'Bitte Titel, Beschreibung und Enddatum ausfuellen.'
     return null
   }
+
+  if (contactEmails.some(email => !isValidEmail(email))) {
+    todoFormError.value = 'Bitte nur gueltige E-Mail-Adressen eingeben.'
+    return null
+  }
+
+  todoFormError.value = ''
 
   return {
     title,
     description,
+    contactEmail: contactEmails.join(', '),
     endDate: todoForm.endDate,
     priority: todoForm.priority,
     status: todoForm.status,
   }
+}
+
+function buildTodoMailtoLink(todo) {
+  const contactEmails = parseContactEmails(todo.contactEmail ?? '')
+
+  if (contactEmails.length === 0) {
+    return ''
+  }
+
+  const subject = encodeURIComponent(`ToDo teilen: ${todo.title}`)
+  const body = encodeURIComponent(
+    [
+      `Titel: ${todo.title}`,
+      `Beschreibung: ${todo.description}`,
+      `Enddatum: ${todo.endDate}`,
+      `Prioritaet: ${todo.priority}`,
+      `Status: ${todo.status}`,
+    ].join('\n'),
+  )
+
+  return `mailto:${contactEmails.map(email => encodeURIComponent(email)).join(',')}?subject=${subject}&body=${body}`
+}
+
+function shareTodo(todo) {
+  const mailtoLink = buildTodoMailtoLink(todo)
+
+  if (!mailtoLink) {
+    return
+  }
+
+  window.location.href = mailtoLink
 }
 
 function getPriorityTone(priority) {
@@ -484,7 +646,19 @@ onBeforeUnmount(() => {
               <span>Beschreibung:</span>
               <textarea v-model="domainForm.description" rows="4" placeholder="Beschreibung eingeben"></textarea>
             </label>
+
+            <label class="domain-protection-toggle">
+              <input v-model="domainForm.isProtected" type="checkbox" />
+              <span>Bereich schützen</span>
+            </label>
+
+            <label v-if="domainForm.isProtected" class="domain-field">
+              <span>Passwort:</span>
+              <input v-model="domainForm.password" type="password" placeholder="Passwort festlegen" />
+            </label>
           </div>
+
+          <p v-if="domainFormError" class="domain-form-error">{{ domainFormError }}</p>
 
           <div class="domain-modal-actions">
             <button type="button" class="domain-modal-cancel" @click="closeDomainModal">Abbrechen</button>
@@ -575,20 +749,38 @@ onBeforeUnmount(() => {
 
           <div class="domain-title">
             <h2>{{ domain.name }}</h2>
+            <button
+              v-if="domain.isProtected"
+              type="button"
+              class="domain-lock"
+              :class="{ unlocked: !isDomainLocked(domain) }"
+              @click="toggleDomainLock(domain)"
+              :aria-label="isDomainLocked(domain) ? 'Bereich entsperren' : 'Bereich sperren'"
+            >
+              {{ isDomainLocked(domain) ? '🔒' : '🔓' }}
+            </button>
             <button type="button" class="domain-delete" @click="deleteDomain(domain.id)" aria-label="Bereich löschen">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M3 6h18v2H3V6zm2 2h14v14c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V8zm3 2v10h2V10H8zm4 0v10h2V10h-2z"/>
               </svg>
             </button>
           </div>
-          <button type="button" class="TaskADD" @click="openTodoModal(domain.id)">Todo Hinzufügen</button>
+          <button type="button" class="TaskADD" @click="openTodoModal(domain.id)">
+            {{ isDomainLocked(domain) ? 'Entsperren' : 'Todo Hinzufügen' }}
+          </button>
         </div>
 
-        <table class="todo-table">
+        <div v-if="isDomainLocked(domain)" class="domain-locked-state">
+          <p>Dieser Bereich ist geschützt. Klicke auf das Schloss und gib das Passwort ein, um ihn zu entsperren.</p>
+        </div>
+
+        <table v-else class="todo-table">
           <thead>
             <tr>
               <th>Titel</th>
               <th>Beschreibung</th>
+              <th>Kontakt</th>
+              <th>Teilen</th>
               <th>Enddatum</th>
               <th>Priorität</th>
               <th>Status</th>
@@ -601,21 +793,60 @@ onBeforeUnmount(() => {
               class="todo-row"
               @click="openEditTodoModal(domain.id, todo)"
             >
-              <td>{{ todo.title }}</td>
-              <td>{{ todo.description }}</td>
-              <td>{{ todo.endDate }}</td>
-              <td>
+              <td data-label="Titel">{{ todo.title }}</td>
+              <td data-label="Beschreibung">{{ todo.description }}</td>
+              <td data-label="Kontakt">
+                <div class="contact-cell">
+                  <span>{{ formatContactEmails(todo.contactEmail || '') || '-' }}</span>
+                </div>
+              </td>
+              <td data-label="Teilen">
+                <button
+                  type="button"
+                  class="share-button"
+                  :disabled="!parseContactEmails(todo.contactEmail || '').length"
+                  @click.stop="shareTodo(todo)"
+                >
+                  Teilen
+                </button>
+              </td>
+              <td data-label="Enddatum">{{ todo.endDate }}</td>
+              <td data-label="Priorität">
                 <span class="tone-pill" :class="getPriorityTone(todo.priority)">{{ todo.priority }}</span>
               </td>
-              <td>
+              <td data-label="Status">
                 <span class="tone-pill" :class="getStatusTone(todo.status)">{{ todo.status }}</span>
               </td>
             </tr>
             <tr v-if="domain.toDos.length === 0">
-              <td colspan="5" class="empty-state">Keine Einträge für diese Suche.</td>
+              <td colspan="7" class="empty-state">Keine Einträge für diese Suche.</td>
             </tr>
           </tbody>
         </table>
+      </section>
+
+      <section v-if="showUnlockDomainModal" class="unlock-domain-modal-backdrop" @click.self="closeUnlockDomainModal">
+        <div class="unlock-domain-modal">
+          <div class="unlock-domain-modal-header">
+            <h2>Bereich entsperren</h2>
+            <button type="button" class="unlock-domain-modal-close" @click="closeUnlockDomainModal" aria-label="Popup schliessen">
+              X
+            </button>
+          </div>
+
+          <div class="unlock-domain-modal-body">
+            <label class="domain-field">
+              <span>Passwort:</span>
+              <input v-model="unlockPassword" type="password" placeholder="Passwort eingeben" @keyup.enter="unlockDomain" />
+            </label>
+            <p v-if="unlockDomainError" class="domain-form-error">{{ unlockDomainError }}</p>
+          </div>
+
+          <div class="unlock-domain-modal-actions">
+            <button type="button" class="domain-modal-cancel" @click="closeUnlockDomainModal">Abbrechen</button>
+            <button type="button" class="domain-modal-save" @click="unlockDomain">Entsperren</button>
+          </div>
+        </div>
       </section>
 
       <section v-if="showTodoModal" class="todo-modal-backdrop" @click.self="closeTodoModal">
@@ -636,6 +867,15 @@ onBeforeUnmount(() => {
             <label class="todo-field">
               <span>Beschreibung:</span>
               <textarea v-model="todoForm.description" rows="4" placeholder="Beschreibung eingeben"></textarea>
+            </label>
+
+            <label class="todo-field">
+              <span>Kontakt E-Mail:</span>
+              <input
+                v-model="todoForm.contactEmail"
+                type="text"
+                placeholder="a@exemple.ch, b@exemple.ch"
+              />
             </label>
 
             <label class="todo-field">
@@ -671,6 +911,8 @@ onBeforeUnmount(() => {
               </select>
             </label>
           </div>
+
+          <p v-if="todoFormError" class="todo-form-error">{{ todoFormError }}</p>
 
           <div class="todo-modal-actions">
             <button v-if="activeTodoId" type="button" class="todo-modal-delete" @click="deleteTodo">Löschen</button>
@@ -742,6 +984,10 @@ onBeforeUnmount(() => {
   letter-spacing: 0.01em;
 }
 .app-shell {
+  --action-blue: #6fa1cf;
+  --action-blue-hover: #5a8fbe;
+  --action-blue-shadow: rgba(111, 161, 207, 0.28);
+  --action-blue-shadow-hover: rgba(90, 143, 190, 0.32);
   min-height: 100vh;
   background: linear-gradient(180deg, #f4f8fc 0%, #eef3f8 100%);
   color: #19324d;
@@ -875,24 +1121,35 @@ onBeforeUnmount(() => {
 .toolbar-link {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 18px;
   border: 0;
-  background: transparent;
-  padding: 0;
-  color: inherit;
+  border-radius: 999px;
+  background: var(--action-blue);
+  color: #ffffff;
   font-size: 1rem;
+  font-weight: 700;
+  box-shadow: 0 10px 24px var(--action-blue-shadow);
   cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.toolbar-link:hover {
+  background: var(--action-blue-hover);
+  box-shadow: 0 14px 28px var(--action-blue-shadow-hover);
+  transform: translateY(-1px);
 }
 
 .toolbar-plus {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
-  border: 1px solid currentColor;
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: 999px;
-  font-size: 0.82rem;
+  font-size: 1rem;
   line-height: 1;
 }
 
@@ -1078,6 +1335,19 @@ onBeforeUnmount(() => {
   gap: 14px;
 }
 
+.domain-protection-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #4b647d;
+  font-weight: 700;
+}
+
+.domain-protection-toggle input {
+  width: 18px;
+  height: 18px;
+}
+
 .domain-field {
   display: grid;
   gap: 8px;
@@ -1103,6 +1373,12 @@ onBeforeUnmount(() => {
 .domain-field textarea {
   resize: vertical;
   min-height: 110px;
+}
+
+.domain-form-error {
+  margin: 8px 0 0;
+  color: #d62828;
+  font-weight: 700;
 }
 
 .domain-modal-actions {
@@ -1221,6 +1497,12 @@ onBeforeUnmount(() => {
   margin-top: 20px;
 }
 
+.todo-form-error {
+  margin: 4px 0 0;
+  color: #d62828;
+  font-weight: 700;
+}
+
 .todo-modal-cancel,
 .todo-modal-save,
 .todo-modal-delete {
@@ -1270,14 +1552,52 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 
-.TaskADD {
-  padding: 10px 14px;
+.domain-lock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
   border: 0;
-  border-radius: 10px;
-  background: #66a1cf;
+  border-radius: 999px;
+  background: rgba(111, 161, 207, 0.16);
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.domain-lock.unlocked {
+  background: rgba(96, 170, 109, 0.18);
+}
+
+.TaskADD {
+  min-height: 42px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--action-blue);
   color: #ffffff;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 10px 24px var(--action-blue-shadow);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.TaskADD:hover {
+  background: var(--action-blue-hover);
+  box-shadow: 0 14px 28px var(--action-blue-shadow-hover);
+  transform: translateY(-1px);
+}
+
+.domain-locked-state {
+  padding: 18px;
+  border: 1px dashed #b8c7d6;
+  border-radius: 18px;
+  background: #f9fbfd;
+  color: #4b647d;
+}
+
+.domain-locked-state p {
+  margin: 0;
 }
 
 .todo-table {
@@ -1290,6 +1610,38 @@ onBeforeUnmount(() => {
   padding: 12px 10px;
   border-bottom: 1px solid #e4ebf3;
   text-align: left;
+  vertical-align: top;
+}
+
+.contact-cell {
+  display: grid;
+  gap: 6px;
+}
+
+.share-button {
+  min-width: 112px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--action-blue);
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 24px var(--action-blue-shadow);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.share-button:disabled {
+  background: #b8c7d6;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.share-button:not(:disabled):hover {
+  background: var(--action-blue-hover);
+  box-shadow: 0 14px 28px var(--action-blue-shadow-hover);
+  transform: translateY(-1px);
 }
 
 .tone-pill {
@@ -1338,19 +1690,29 @@ onBeforeUnmount(() => {
 
 @media (max-width: 980px) {
   .top-nav {
-    justify-content: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
     min-height: auto;
     padding: 20px 24px;
+    gap: 16px;
   }
 
   .brand {
     position: static;
     transform: none;
+    order: 1;
+    width: 100%;
   }
 
   .nav-search {
     width: min(100%, 320px);
     height: 54px;
+  }
+
+  .nav-right {
+    order: 2;
+    width: 100%;
+    justify-content: center;
   }
 
   .nav-filter-toggle {
@@ -1375,14 +1737,151 @@ onBeforeUnmount(() => {
     padding: 0;
   }
 
+  .toolbar-link {
+    width: 100%;
+    justify-content: center;
+  }
+
   .domain-header {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .todo-table {
+  .domain-title {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .TaskADD {
+    width: 100%;
+  }
+
+  .todo-table,
+  .todo-table tbody,
+  .todo-table tr,
+  .todo-table td {
     display: block;
-    overflow-x: auto;
+    width: 100%;
+  }
+
+  .todo-table thead {
+    display: none;
+  }
+
+  .todo-table {
+    border-collapse: separate;
+  }
+
+  .todo-row {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 16px;
+    border: 1px solid #dbe5ef;
+    border-radius: 18px;
+    background: #f9fbfd;
+  }
+
+  .todo-table td {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0;
+    border-bottom: 0;
+  }
+
+  .todo-table td::before {
+    content: attr(data-label);
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #6f859c;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .share-button {
+    width: 100%;
+  }
+
+  .empty-state {
+    display: block;
+    padding: 16px 0 0;
+  }
+
+  .empty-state::before {
+    content: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .top-nav {
+    padding: 18px 16px;
+  }
+
+  .nav-right {
+    gap: 10px;
+  }
+
+  .nav-search {
+    width: 100%;
+    height: 50px;
+    padding-left: 14px;
+    border-width: 3px;
+  }
+
+  .nav-filter-toggle {
+    width: 46px;
+    height: 46px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.8);
+  }
+
+  .main-content {
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .domain-card,
+  .todo-modal,
+  .domain-modal,
+  .delete-domain-modal {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .todo-modal-backdrop,
+  .domain-modal-backdrop,
+  .delete-domain-modal-backdrop,
+  .unlock-domain-modal-backdrop {
+    padding: 12px;
+  }
+
+  .todo-modal-actions,
+  .domain-modal-actions,
+  .delete-domain-modal-actions,
+  .unlock-domain-modal-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .todo-modal-cancel,
+  .todo-modal-save,
+  .todo-modal-delete,
+  .domain-modal-cancel,
+  .domain-modal-save,
+  .cancel-button,
+  .confirm-button {
+    width: 100%;
+  }
+
+  .transfer-options {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .transfer-button,
+  .delete-button {
+    width: 100%;
   }
 }
 
@@ -1415,6 +1914,65 @@ onBeforeUnmount(() => {
   width: 16px;
   height: 16px;
   fill: currentColor;
+}
+
+.unlock-domain-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(25, 50, 77, 0.28);
+}
+
+.unlock-domain-modal {
+  width: min(420px, 100%);
+  padding: 20px;
+  border: 1px solid #c9d3dd;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(25, 50, 77, 0.18);
+}
+
+.unlock-domain-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.unlock-domain-modal-header h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  color: #4b647d;
+}
+
+.unlock-domain-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #aeb8c2;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #6d6d6d;
+  cursor: pointer;
+}
+
+.unlock-domain-modal-body {
+  display: grid;
+  gap: 12px;
+}
+
+.unlock-domain-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
 }
 
 .delete-domain-modal-backdrop {
