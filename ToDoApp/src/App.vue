@@ -23,6 +23,13 @@ const createTodoForm = () => ({
   status: 'Offen',
 })
 
+const createDomainForm = () => ({
+  name: '',
+  description: '',
+  isProtected: false,
+  password: '',
+})
+
 const draftFilters = ref(createFilters())
 const activeFilters = ref(createFilters())
 const showTodoModal = ref(false)
@@ -36,12 +43,7 @@ const filterPanel = reactive({
   height: 590,
 })
 const todoForm = reactive(createTodoForm())
-const domainForm = reactive({
-  name: '',
-  description: '',
-  isProtected: false,
-  password: '',
-})
+const domainForm = reactive(createDomainForm())
 const showDeleteDomainModal = ref(false)
 const deletingDomainId = ref(null)
 const todoTransferDecisions = ref([])
@@ -66,6 +68,11 @@ const toneByStatus = {
   Offen: 'is-red',
   'In Arbeit': 'is-yellow',
   Erledigt: 'is-green',
+}
+const toneOptionStyleByTone = {
+  'is-red': { backgroundColor: '#ff0000', color: '#ffffff' },
+  'is-yellow': { backgroundColor: '#ffe600', color: '#2d2d2d' },
+  'is-green': { backgroundColor: '#11ff09', color: '#143014' },
 }
 
 const todoStore = useTodoStore()
@@ -104,17 +111,9 @@ const filteredDomains = computed(() => {
 
 function normalizeDomains() {
   domains.value.forEach((domain) => {
-    if (typeof domain.isProtected !== 'boolean') {
-      domain.isProtected = false
-    }
-
-    if (typeof domain.password !== 'string') {
-      domain.password = ''
-    }
-
-    if (typeof domain.isUnlocked !== 'boolean') {
-      domain.isUnlocked = !domain.isProtected
-    }
+    domain.isProtected = typeof domain.isProtected === 'boolean' ? domain.isProtected : false
+    domain.password = typeof domain.password === 'string' ? domain.password : ''
+    domain.isUnlocked = typeof domain.isUnlocked === 'boolean' ? domain.isUnlocked : !domain.isProtected
   })
 }
 
@@ -128,6 +127,38 @@ function lockProtectedDomainsOnLoad() {
 
 function isDomainLocked(domain) {
   return Boolean(domain.isProtected && !domain.isUnlocked)
+}
+
+function findDomainById(domainId) {
+  return domains.value.find((domain) => domain.id === domainId)
+}
+
+function removeDomainById(domainId) {
+  domains.value = domains.value.filter((domain) => domain.id !== domainId)
+}
+
+function resetDomainForm() {
+  Object.assign(domainForm, createDomainForm())
+  domainFormError.value = ''
+}
+
+function resetTodoModalState() {
+  Object.assign(todoForm, createTodoForm())
+  activeTodoId.value = null
+  todoFormError.value = ''
+}
+
+function resetUnlockDomainState() {
+  showUnlockDomainModal.value = false
+  unlockingDomainId.value = null
+  unlockPassword.value = ''
+  unlockDomainError.value = ''
+}
+
+function resetDeleteDomainState() {
+  showDeleteDomainModal.value = false
+  deletingDomainId.value = null
+  todoTransferDecisions.value = []
 }
 
 function matchesSearch(todo, query) {
@@ -159,8 +190,11 @@ function applyFilters() {
 
 function toggleFilters() {
   if (!showFilters.value) {
-    filterPanel.top = 110
-    filterPanel.left = Math.max(0, window.innerWidth - filterPanel.width - 32)
+    Object.assign(filterPanel, {
+      ...filterPanel,
+      top: 110,
+      left: Math.max(0, window.innerWidth - filterPanel.width - 32),
+    })
   }
 
   showFilters.value = !showFilters.value
@@ -197,20 +231,25 @@ function stopFilterDrag() {
   window.removeEventListener('mouseup', stopFilterDrag)
 }
 
-function startFilterResize(event) {
+function beginFilterResize(event, direction) {
   event.preventDefault()
   event.stopPropagation()
 
   resizeState = {
-    direction: 'right',
+    direction,
     startX: event.clientX,
     startY: event.clientY,
     startWidth: filterPanel.width,
     startHeight: filterPanel.height,
+    ...(direction === 'left' ? { startLeft: filterPanel.left } : {}),
   }
 
   window.addEventListener('mousemove', onFilterResize)
   window.addEventListener('mouseup', stopFilterResize)
+}
+
+function startFilterResize(event) {
+  beginFilterResize(event, 'right')
 }
 
 function onFilterResize(event) {
@@ -237,56 +276,35 @@ function stopFilterResize() {
 }
 
 function startFilterResizeLeft(event) {
-  event.preventDefault()
-  event.stopPropagation()
-
-  resizeState = {
-    direction: 'left',
-    startX: event.clientX,
-    startY: event.clientY,
-    startLeft: filterPanel.left,
-    startWidth: filterPanel.width,
-    startHeight: filterPanel.height,
-  }
-
-  window.addEventListener('mousemove', onFilterResize)
-  window.addEventListener('mouseup', stopFilterResize)
+  beginFilterResize(event, 'left')
 }
 
 function deleteDomain(domainId) {
-  const domain = domains.value.find(d => d.id === domainId)
+  const domain = findDomainById(domainId)
   if (!domain) return
 
   if (domain.toDos.length === 0 || domains.value.length === 1) {
-    domains.value = domains.value.filter(d => d.id !== domainId)
+    removeDomainById(domainId)
     return
   }
 
   deletingDomainId.value = domainId
-  todoTransferDecisions.value = domain.toDos.map(todo => ({
+  todoTransferDecisions.value = domain.toDos.map((todo) => ({
     todoId: todo.id,
     action: 'transfer',
-    targetDomainId: domains.value.find(d => d.id !== domainId)?.id
+    targetDomainId: domains.value.find((entry) => entry.id !== domainId)?.id,
   }))
   showDeleteDomainModal.value = true
 }
 
 function addDomain() {
-  domainForm.name = ''
-  domainForm.description = ''
-  domainForm.isProtected = false
-  domainForm.password = ''
-  domainFormError.value = ''
+  resetDomainForm()
   showDomainModal.value = true
 }
 
 function closeDomainModal() {
   showDomainModal.value = false
-  domainForm.name = ''
-  domainForm.description = ''
-  domainForm.isProtected = false
-  domainForm.password = ''
-  domainFormError.value = ''
+  resetDomainForm()
 }
 
 function saveDomain() {
@@ -335,14 +353,11 @@ function toggleDomainLock(domain) {
 }
 
 function closeUnlockDomainModal() {
-  showUnlockDomainModal.value = false
-  unlockingDomainId.value = null
-  unlockPassword.value = ''
-  unlockDomainError.value = ''
+  resetUnlockDomainState()
 }
 
 function unlockDomain() {
-  const domain = domains.value.find(entry => entry.id === unlockingDomainId.value)
+  const domain = findDomainById(unlockingDomainId.value)
 
   if (!domain) {
     closeUnlockDomainModal()
@@ -359,7 +374,7 @@ function unlockDomain() {
 }
 
 function openTodoModal(domainId) {
-  const domain = domains.value.find((entry) => entry.id === domainId)
+  const domain = findDomainById(domainId)
   if (!domain) {
     return
   }
@@ -370,34 +385,27 @@ function openTodoModal(domainId) {
   }
 
   activeDomainId.value = domainId
-  activeTodoId.value = null
-  resetTodoForm()
+  resetTodoModalState()
   showTodoModal.value = true
 }
 
 function openEditTodoModal(domainId, todo) {
   activeDomainId.value = domainId
+  resetTodoModalState()
   activeTodoId.value = todo.id
-  resetTodoForm()
   Object.assign(todoForm, todo)
   todoForm.contactEmail = todo.contactEmail ?? ''
-  todoFormError.value = ''
   showTodoModal.value = true
 }
 
 function closeTodoModal() {
   showTodoModal.value = false
   activeDomainId.value = null
-  activeTodoId.value = null
-  todoFormError.value = ''
-}
-
-function resetTodoForm() {
-  Object.assign(todoForm, createTodoForm())
+  resetTodoModalState()
 }
 
 function getActiveDomain() {
-  return domains.value.find((entry) => entry.id === activeDomainId.value)
+  return findDomainById(activeDomainId.value)
 }
 
 function isValidEmail(email) {
@@ -482,19 +490,7 @@ function getStatusTone(status) {
 }
 
 function getToneOptionStyle(tone) {
-  if (tone === 'is-red') {
-    return { backgroundColor: '#ff0000', color: '#ffffff' }
-  }
-
-  if (tone === 'is-yellow') {
-    return { backgroundColor: '#ffe600', color: '#2d2d2d' }
-  }
-
-  if (tone === 'is-green') {
-    return { backgroundColor: '#11ff09', color: '#143014' }
-  }
-
-  return {}
+  return toneOptionStyleByTone[tone] ?? {}
 }
 
 function saveTodo() {
@@ -535,16 +531,16 @@ function deleteTodo() {
 }
 
 function getDeletingDomain() {
-  return domains.value.find(d => d.id === deletingDomainId.value)
+  return findDomainById(deletingDomainId.value)
 }
 
 function getOtherDomains() {
-  return domains.value.filter(d => d.id !== deletingDomainId.value)
+  return domains.value.filter((domain) => domain.id !== deletingDomainId.value)
 }
 
 function getTodoTitle(todoId) {
   const domain = getDeletingDomain()
-  const todo = domain?.toDos.find(t => t.id === todoId)
+  const todo = domain?.toDos.find((entry) => entry.id === todoId)
   return todo?.title || ''
 }
 
@@ -559,9 +555,7 @@ function setDelete(decision) {
 }
 
 function cancelDeleteDomain() {
-  showDeleteDomainModal.value = false
-  deletingDomainId.value = null
-  todoTransferDecisions.value = []
+  resetDeleteDomainState()
 }
 
 function confirmDeleteDomain() {
@@ -570,9 +564,9 @@ function confirmDeleteDomain() {
 
   for (const decision of todoTransferDecisions.value) {
     if (decision.action === 'transfer') {
-      const targetDomain = domains.value.find(d => d.id === decision.targetDomainId)
+      const targetDomain = findDomainById(decision.targetDomainId)
       if (targetDomain) {
-        const todo = domain.toDos.find(t => t.id === decision.todoId)
+        const todo = domain.toDos.find((entry) => entry.id === decision.todoId)
         if (todo) {
           targetDomain.toDos.push({ ...todo })
         }
@@ -580,10 +574,8 @@ function confirmDeleteDomain() {
     }
   }
 
-  domains.value = domains.value.filter(d => d.id !== deletingDomainId.value)
-  showDeleteDomainModal.value = false
-  deletingDomainId.value = null
-  todoTransferDecisions.value = []
+  removeDomainById(deletingDomainId.value)
+  resetDeleteDomainState()
 }
 
 onBeforeUnmount(() => {
@@ -1118,21 +1110,26 @@ onBeforeUnmount(() => {
   color: #6d6d6d;
 }
 
-.toolbar-link {
+.toolbar-link,
+.TaskADD,
+.share-button {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  min-height: 46px;
-  padding: 0 18px;
   border: 0;
   border-radius: 999px;
   background: var(--action-blue);
   color: #ffffff;
-  font-size: 1rem;
   font-weight: 700;
   box-shadow: 0 10px 24px var(--action-blue-shadow);
   cursor: pointer;
   transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.toolbar-link {
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 18px;
+  font-size: 1rem;
 }
 
 .toolbar-link:hover {
@@ -1283,27 +1280,44 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-.domain-modal-backdrop {
+.domain-modal-backdrop,
+.todo-modal-backdrop,
+.unlock-domain-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 35;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
+}
+
+.domain-modal-backdrop {
+  z-index: 35;
   background: rgba(25, 50, 77, 0.22);
 }
 
-.domain-modal {
+.domain-modal,
+.unlock-domain-modal {
   width: min(420px, 100%);
+}
+
+.domain-modal,
+.todo-modal,
+.unlock-domain-modal {
   padding: 20px;
   border: 1px solid #c9d3dd;
-  border-radius: 20px;
   background: #ffffff;
   box-shadow: 0 24px 60px rgba(25, 50, 77, 0.18);
 }
 
-.domain-modal-header {
+.domain-modal,
+.unlock-domain-modal {
+  border-radius: 20px;
+}
+
+.domain-modal-header,
+.todo-modal-header,
+.unlock-domain-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1311,13 +1325,16 @@ onBeforeUnmount(() => {
   margin-bottom: 18px;
 }
 
-.domain-modal-header h2 {
+.domain-modal-header h2,
+.unlock-domain-modal-header h2 {
   margin: 0;
-  font-size: 1.4rem;
+  font-size: 1.35rem;
   color: #4b647d;
 }
 
-.domain-modal-close {
+.domain-modal-close,
+.todo-modal-close,
+.unlock-domain-modal-close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1389,7 +1406,10 @@ onBeforeUnmount(() => {
 }
 
 .domain-modal-cancel,
-.domain-modal-save {
+.domain-modal-save,
+.todo-modal-cancel,
+.todo-modal-save,
+.todo-modal-delete {
   min-width: 120px;
   min-height: 42px;
   border-radius: 999px;
@@ -1410,51 +1430,20 @@ onBeforeUnmount(() => {
 }
 
 .todo-modal-backdrop {
-  position: fixed;
-  inset: 0;
   z-index: 40;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
   background: rgba(25, 50, 77, 0.28);
 }
 
 .todo-modal {
   width: min(480px, 100%);
   max-height: min(85vh, 760px);
-  padding: 20px;
-  border: 1px solid #c9d3dd;
   border-radius: 24px;
-  background: #ffffff;
-  box-shadow: 0 24px 60px rgba(25, 50, 77, 0.18);
   overflow: auto;
-}
-
-.todo-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 18px;
 }
 
 .todo-modal-header h2 {
   font-size: 1.5rem;
   color: #4b647d;
-}
-
-.todo-modal-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid #aeb8c2;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #6d6d6d;
-  cursor: pointer;
 }
 
 .todo-form {
@@ -1490,7 +1479,8 @@ onBeforeUnmount(() => {
   min-height: 110px;
 }
 
-.todo-modal-actions {
+.todo-modal-actions,
+.unlock-domain-modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
@@ -1501,16 +1491,6 @@ onBeforeUnmount(() => {
   margin: 4px 0 0;
   color: #d62828;
   font-weight: 700;
-}
-
-.todo-modal-cancel,
-.todo-modal-save,
-.todo-modal-delete {
-  min-width: 120px;
-  min-height: 42px;
-  border-radius: 999px;
-  font-size: 1rem;
-  cursor: pointer;
 }
 
 .todo-modal-cancel {
@@ -1569,20 +1549,20 @@ onBeforeUnmount(() => {
   background: rgba(96, 170, 109, 0.18);
 }
 
+.TaskADD,
+.share-button {
+  justify-content: center;
+  min-height: 42px;
+  font-size: 1rem;
+}
+
 .TaskADD {
   min-height: 42px;
   padding: 10px 16px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--action-blue);
-  color: #ffffff;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 10px 24px var(--action-blue-shadow);
-  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
-.TaskADD:hover {
+.TaskADD:hover,
+.share-button:not(:disabled):hover {
   background: var(--action-blue-hover);
   box-shadow: 0 14px 28px var(--action-blue-shadow-hover);
   transform: translateY(-1px);
@@ -1620,28 +1600,13 @@ onBeforeUnmount(() => {
 
 .share-button {
   min-width: 112px;
-  min-height: 40px;
   padding: 8px 14px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--action-blue);
-  color: #ffffff;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 10px 24px var(--action-blue-shadow);
-  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
 .share-button:disabled {
   background: #b8c7d6;
   box-shadow: none;
   cursor: not-allowed;
-}
-
-.share-button:not(:disabled):hover {
-  background: var(--action-blue-hover);
-  box-shadow: 0 14px 28px var(--action-blue-shadow-hover);
-  transform: translateY(-1px);
 }
 
 .tone-pill {
@@ -1917,62 +1882,13 @@ onBeforeUnmount(() => {
 }
 
 .unlock-domain-modal-backdrop {
-  position: fixed;
-  inset: 0;
   z-index: 45;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
   background: rgba(25, 50, 77, 0.28);
-}
-
-.unlock-domain-modal {
-  width: min(420px, 100%);
-  padding: 20px;
-  border: 1px solid #c9d3dd;
-  border-radius: 20px;
-  background: #ffffff;
-  box-shadow: 0 24px 60px rgba(25, 50, 77, 0.18);
-}
-
-.unlock-domain-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.unlock-domain-modal-header h2 {
-  margin: 0;
-  font-size: 1.35rem;
-  color: #4b647d;
-}
-
-.unlock-domain-modal-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid #aeb8c2;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #6d6d6d;
-  cursor: pointer;
 }
 
 .unlock-domain-modal-body {
   display: grid;
   gap: 12px;
-}
-
-.unlock-domain-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
 }
 
 .delete-domain-modal-backdrop {
