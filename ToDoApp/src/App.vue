@@ -48,6 +48,7 @@ const showDeleteDomainModal = ref(false)
 const deletingDomainId = ref(null)
 const todoTransferDecisions = ref([])
 const todoFormError = ref('')
+const showDeleteTodoConfirm = ref(false)
 const domainFormError = ref('')
 const showUnlockDomainModal = ref(false)
 const unlockingDomainId = ref(null)
@@ -146,6 +147,7 @@ function resetTodoModalState() {
   Object.assign(todoForm, createTodoForm())
   activeTodoId.value = null
   todoFormError.value = ''
+  showDeleteTodoConfirm.value = false
 }
 
 function resetUnlockDomainState() {
@@ -524,6 +526,14 @@ function saveTodo() {
   }
 
   closeTodoModal()
+}
+
+function requestDeleteTodo() {
+  showDeleteTodoConfirm.value = true
+}
+
+function cancelDeleteTodo() {
+  showDeleteTodoConfirm.value = false
 }
 
 function deleteTodo() {
@@ -913,8 +923,16 @@ onBeforeUnmount(() => {
 
           <p v-if="todoFormError" class="todo-form-error">{{ todoFormError }}</p>
 
+          <div v-if="showDeleteTodoConfirm" class="todo-delete-confirm">
+            <p>Willst du dieses Todo wirklich löschen?</p>
+            <div class="todo-delete-confirm-actions">
+              <button type="button" class="todo-modal-cancel" @click="cancelDeleteTodo">Nein</button>
+              <button type="button" class="todo-modal-delete" @click="deleteTodo">Ja</button>
+            </div>
+          </div>
+
           <div class="todo-modal-actions">
-            <button v-if="activeTodoId" type="button" class="todo-modal-delete" @click="deleteTodo">Löschen</button>
+            <button v-if="activeTodoId" type="button" class="todo-modal-delete" @click="requestDeleteTodo">Löschen</button>
             <button type="button" class="todo-modal-cancel" @click="closeTodoModal">Abbrechen</button>
             <button type="button" class="todo-modal-save" @click="saveTodo">Anwenden</button>
           </div>
@@ -1498,6 +1516,27 @@ onBeforeUnmount(() => {
   margin: 4px 0 0;
   color: #d62828;
   font-weight: 700;
+}
+
+.todo-delete-confirm {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid #f0c2c2;
+  border-radius: 16px;
+  background: #fff6f6;
+}
+
+.todo-delete-confirm p {
+  margin: 0;
+  color: #8b2c2c;
+  font-weight: 700;
+}
+
+.todo-delete-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
 }
 
 .todo-modal-cancel {
