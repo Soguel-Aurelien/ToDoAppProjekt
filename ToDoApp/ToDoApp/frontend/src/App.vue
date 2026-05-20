@@ -8,6 +8,7 @@ const showFilters = ref(false)
 
 const createFilters = () => ({
   title: '',
+  categoryId: '',
   domain: '',
   date: '',
   priority: '',
@@ -85,9 +86,10 @@ lockProtectedDomainsOnLoad()
 const filteredDomains = computed(() => {
   const query = search.value.trim().toLowerCase()
   const filters = activeFilters.value
-  const hasTodoFilters = [query, filters.title, filters.date, filters.priority, filters.status].some(Boolean)
+  const hasTodoFilters = [query, filters.title, filters.categoryId, filters.date, filters.priority, filters.status].some(Boolean)
 
   return domains.value
+    .filter((domain) => matchesCategoryFilter(domain, filters.categoryId))
     .map((domain) => ({
       ...domain,
       toDos: isDomainLocked(domain)
@@ -182,6 +184,14 @@ function matchesFilters(todo, domain, filters) {
   const statusMatch = !filters.status || todo.status === filters.status
 
   return titleMatch && domainMatch && dateMatch && priorityMatch && statusMatch
+}
+
+function matchesCategoryFilter(domain, categoryId) {
+  if (!categoryId) {
+    return true
+  }
+
+  return String(domain.id) === String(categoryId)
 }
 
 function applyFilters() {
@@ -701,6 +711,16 @@ onBeforeUnmount(() => {
             <label class="filter-field">
               <span>Name:</span>
               <input v-model="draftFilters.title" type="text" placeholder="Titel filtern" />
+            </label>
+
+            <label class="filter-field">
+              <span>Kategorie-ID:</span>
+              <select v-model="draftFilters.categoryId">
+                <option value="">Alle</option>
+                <option v-for="domain in domains" :key="domain.id" :value="String(domain.id)">
+                  {{ domain.id }} - {{ domain.name }}
+                </option>
+              </select>
             </label>
 
             <label class="filter-field">
