@@ -12,6 +12,9 @@ use CodeIgniter\Filters\InvalidChars;
 use CodeIgniter\Filters\PageCache;
 use CodeIgniter\Filters\PerformanceMetrics;
 use CodeIgniter\Filters\SecureHeaders;
+use App\Filters\ApiKeyFilter;
+use App\Filters\ApiLogFilter;
+use App\Filters\JwtAuthFilter;
 
 class Filters extends BaseFilters
 {
@@ -34,6 +37,9 @@ class Filters extends BaseFilters
         'forcehttps'    => ForceHTTPS::class,
         'pagecache'     => PageCache::class,
         'performance'   => PerformanceMetrics::class,
+        'apiKey'        => ApiKeyFilter::class,
+        'apiLog'        => ApiLogFilter::class,
+        'jwtAuth'       => JwtAuthFilter::class,
     ];
 
     /**
@@ -79,6 +85,7 @@ class Filters extends BaseFilters
         'after' => [
             // 'honeypot',
             // 'secureheaders',
+            'apiLog',
         ],
     ];
 

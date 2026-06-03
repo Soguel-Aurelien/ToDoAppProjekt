@@ -1,7 +1,5 @@
 ﻿<script setup>
-import { computed, onBeforeUnmount, reactive, ref } from 'vue'
-import { storeToRefs } from 'pinia'
-import { useTodoStore } from './stores/todo'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 
 const search = ref('')
 const showFilters = ref(false)
@@ -55,6 +53,11 @@ const showUnlockDomainModal = ref(false)
 const unlockingDomainId = ref(null)
 const unlockPassword = ref('')
 const unlockDomainError = ref('')
+const apiError = ref('')
+const domains = ref([])
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8080/api'
+const API_KEY = import.meta.env.VITE_API_KEY ?? 'dev-frontend-key-2026'
 
 let dragState = null
 let resizeState = null
@@ -77,11 +80,39 @@ const toneOptionStyleByTone = {
   'is-green': { backgroundColor: '#11ff09', color: '#143014' },
 }
 
-const todoStore = useTodoStore()
-const { domains } = storeToRefs(todoStore)
+onMounted(loadDomains)
 
-normalizeDomains()
-lockProtectedDomainsOnLoad()
+async function apiRequest(path, options = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': API_KEY,
+      ...(options.headers ?? {}),
+    },
+    ...options,
+  })
+
+  const body = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    const message = body.message || 'Die API-Anfrage ist fehlgeschlagen.'
+    throw new Error(message)
+  }
+
+  return body
+}
+
+async function loadDomains() {
+  try {
+    apiError.value = ''
+    const body = await apiRequest('/categories?include_todos=1&limit=100&page=1&order_by=name')
+    domains.value = body.data ?? []
+    normalizeDomains()
+    lockProtectedDomainsOnLoad()
+  } catch (error) {
+    apiError.value = error.message
+  }
+}
 
 const filteredDomains = computed(() => {
   const query = search.value.trim().toLowerCase()
@@ -291,11 +322,14 @@ function startFilterResizeLeft(event) {
   beginFilterResize(event, 'left')
 }
 
-function deleteDomain(domainId) {
+async function deleteDomain(domainId) {
   const domain = findDomainById(domainId)
   if (!domain) return
 
   if (domain.toDos.length === 0 || domains.value.length === 1) {
+    await apiRequest(`/categories/${domainId}`, {
+      method: 'DELETE',
+    })
     removeDomainById(domainId)
     return
   }
@@ -319,7 +353,7 @@ function closeDomainModal() {
   resetDomainForm()
 }
 
-function saveDomain() {
+async function saveDomain() {
   const trimmedName = domainForm.name.trim()
   const trimmedPassword = domainForm.password.trim()
 
@@ -335,17 +369,25 @@ function saveDomain() {
 
   domainFormError.value = ''
 
-  domains.value.push({
-    id: Date.now(),
-    name: trimmedName,
-    description: domainForm.description.trim(),
-    isProtected: domainForm.isProtected,
-    password: domainForm.isProtected ? trimmedPassword : '',
-    isUnlocked: !domainForm.isProtected,
-    toDos: [],
-  })
+  try {
+    const body = await apiRequest('/categories', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: trimmedName,
+        description: domainForm.description.trim(),
+        isProtected: domainForm.isProtected,
+        password: trimmedPassword,
+      }),
+    })
 
-  closeDomainModal()
+    domains.value.push({
+      ...body.data,
+      toDos: [],
+    })
+    closeDomainModal()
+  } catch (error) {
+    domainFormError.value = error.message
+  }
 }
 
 function toggleDomainLock(domainOrId) {
@@ -375,7 +417,7 @@ function closeUnlockDomainModal() {
   resetUnlockDomainState()
 }
 
-function unlockDomain() {
+async function unlockDomain() {
   const domain = findDomainById(unlockingDomainId.value)
 
   if (!domain) {
@@ -383,13 +425,19 @@ function unlockDomain() {
     return
   }
 
-  if (unlockPassword.value !== domain.password) {
-    unlockDomainError.value = 'Falsches Passwort.'
-    return
-  }
+  try {
+    await apiRequest(`/categories/${domain.id}/unlock`, {
+      method: 'POST',
+      body: JSON.stringify({
+        password: unlockPassword.value,
+      }),
+    })
 
-  domain.isUnlocked = true
-  closeUnlockDomainModal()
+    domain.isUnlocked = true
+    closeUnlockDomainModal()
+  } catch (error) {
+    unlockDomainError.value = error.message
+  }
 }
 
 function openTodoModal(domainId) {
@@ -512,7 +560,7 @@ function getToneOptionStyle(tone) {
   return toneOptionStyleByTone[tone] ?? {}
 }
 
-function saveTodo() {
+async function saveTodo() {
   const domain = getActiveDomain()
   const payload = getTodoPayload()
 
@@ -520,22 +568,30 @@ function saveTodo() {
     return
   }
 
-  if (activeTodoId.value) {
-    const todo = domain.toDos.find((entry) => entry.id === activeTodoId.value)
-
-    if (!todo) {
-      return
+  try {
+    if (activeTodoId.value) {
+      await apiRequest(`/todos/${activeTodoId.value}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          ...payload,
+          categoryId: activeDomainId.value,
+        }),
+      })
+    } else {
+      await apiRequest('/todos', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...payload,
+          categoryId: activeDomainId.value,
+        }),
+      })
     }
 
-    Object.assign(todo, payload)
-  } else {
-    domain.toDos.push({
-      id: Date.now(),
-      ...payload,
-    })
+    await loadDomains()
+    closeTodoModal()
+  } catch (error) {
+    todoFormError.value = error.message
   }
-
-  closeTodoModal()
 }
 
 function requestDeleteTodo() {
@@ -546,15 +602,22 @@ function cancelDeleteTodo() {
   showDeleteTodoConfirm.value = false
 }
 
-function deleteTodo() {
+async function deleteTodo() {
   const domain = getActiveDomain()
 
   if (!domain || !activeTodoId.value) {
     return
   }
 
-  domain.toDos = domain.toDos.filter((entry) => entry.id !== activeTodoId.value)
-  closeTodoModal()
+  try {
+    await apiRequest(`/todos/${activeTodoId.value}`, {
+      method: 'DELETE',
+    })
+    domain.toDos = domain.toDos.filter((entry) => entry.id !== activeTodoId.value)
+    closeTodoModal()
+  } catch (error) {
+    todoFormError.value = error.message
+  }
 }
 
 function getDeletingDomain() {
@@ -585,24 +648,34 @@ function cancelDeleteDomain() {
   resetDeleteDomainState()
 }
 
-function confirmDeleteDomain() {
+async function confirmDeleteDomain() {
   const domain = getDeletingDomain()
   if (!domain) return
 
-  for (const decision of todoTransferDecisions.value) {
-    if (decision.action === 'transfer') {
-      const targetDomain = findDomainById(decision.targetDomainId)
-      if (targetDomain) {
-        const todo = domain.toDos.find((entry) => entry.id === decision.todoId)
-        if (todo) {
-          targetDomain.toDos.push({ ...todo })
-        }
+  try {
+    for (const decision of todoTransferDecisions.value) {
+      if (decision.action === 'transfer' && decision.targetDomainId) {
+        await apiRequest(`/todos/${decision.todoId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            categoryId: decision.targetDomainId,
+          }),
+        })
+      } else if (decision.action === 'delete') {
+        await apiRequest(`/todos/${decision.todoId}`, {
+          method: 'DELETE',
+        })
       }
     }
-  }
 
-  removeDomainById(deletingDomainId.value)
-  resetDeleteDomainState()
+    await apiRequest(`/categories/${deletingDomainId.value}`, {
+      method: 'DELETE',
+    })
+    await loadDomains()
+    resetDeleteDomainState()
+  } catch (error) {
+    apiError.value = error.message
+  }
 }
 
 onBeforeUnmount(() => {
@@ -639,6 +712,8 @@ onBeforeUnmount(() => {
     </header>
 
     <main class="main-content">
+      <p v-if="apiError" class="api-error">{{ apiError }}</p>
+
       <section class="toolbar-row">
         <button type="button" class="toolbar-link" @click="addDomain">
           <span>Bereich hinzufügen</span>
@@ -1145,6 +1220,16 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 20px;
   padding: 32px;
+}
+
+.api-error {
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid #f0c2c2;
+  border-radius: 14px;
+  background: #fff6f6;
+  color: #8b2c2c;
+  font-weight: 700;
 }
 
 .toolbar-row {
