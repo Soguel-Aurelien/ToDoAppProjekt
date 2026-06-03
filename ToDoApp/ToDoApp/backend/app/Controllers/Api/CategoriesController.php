@@ -6,6 +6,7 @@ use App\Controllers\BaseController;
 use App\Models\CategoryModel;
 use App\Models\TodoContactModel;
 use App\Models\TodoModel;
+use CodeIgniter\Database\Exceptions\DatabaseException;
 use CodeIgniter\HTTP\ResponseInterface;
 
 class CategoriesController extends BaseController
@@ -97,7 +98,13 @@ class CategoriesController extends BaseController
             return $this->fail('Die Eingabedaten sind ungueltig.', 422, $validation);
         }
 
-        $id = $this->categories->insert($this->categoryData($payload, true), true);
+        try {
+            $id = $this->categories->insert($this->categoryData($payload, true), true);
+        } catch (DatabaseException $exception) {
+            return $this->fail('Datenbank ist nicht erreichbar. Bitte MySQL starten und Migrationen ausfuehren.', 503, [
+                'database' => 'Verbindung zu localhost:3306 / todo_app fehlgeschlagen.',
+            ]);
+        }
 
         return $this->respond([
             'message' => 'Kategorie wurde erstellt.',

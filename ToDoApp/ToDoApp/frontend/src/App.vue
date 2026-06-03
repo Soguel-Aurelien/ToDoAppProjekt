@@ -95,7 +95,7 @@ async function apiRequest(path, options = {}) {
   const body = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    const message = body.message || 'Die API-Anfrage ist fehlgeschlagen.'
+    const message = body.message || `Die API-Anfrage ist fehlgeschlagen. HTTP ${response.status}`
     throw new Error(message)
   }
 

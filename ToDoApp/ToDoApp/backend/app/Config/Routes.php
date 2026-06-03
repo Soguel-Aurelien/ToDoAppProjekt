@@ -8,7 +8,12 @@ use CodeIgniter\Router\RouteCollection;
 $routes->get('/', 'Home::index');
 
 $routes->options('api/(:any)', static function () {
-    return service('response')->setStatusCode(204);
+    return service('response')
+        ->setStatusCode(204)
+        ->setHeader('Access-Control-Allow-Origin', $_SERVER['HTTP_ORIGIN'] ?? 'http://127.0.0.1:5173')
+        ->setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-API-Key')
+        ->setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+        ->setHeader('Access-Control-Max-Age', '7200');
 });
 
 $routes->group('api', ['filter' => 'cors'], static function ($routes) {
