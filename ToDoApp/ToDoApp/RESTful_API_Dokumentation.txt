@@ -1,0 +1,1215 @@
+NICO UND BEN SIND DIE GRÖSSTE CHILLER UND HS DER WELT
+UND AURELIEN EIN RIESE MACHER
+RESTful API Dokumentation - ToDo App
+====================================
+
+Projekt: ToDo App
+Backend: CodeIgniter 4 / PHP
+Frontend: Vue 3 / Vite
+Datenbank: MySQL
+API-Basis-URL lokal: http://127.0.0.1:8080/api
+Frontend lokal: http://127.0.0.1:5173
+
+
+1. Projektübersicht
+-------------------
+
+Die ToDo App besteht aus einem Backend und einem Frontend. Das Backend stellt
+eine RESTful API für TODO-Aufgaben und TODO-Kategorien bereit. Das Frontend
+verwendet diese API, um Kategorien und Aufgaben anzuzeigen, zu erstellen, zu
+bearbeiten und zu löschen.
+
+Die API arbeitet vollständig mit JSON. Eingabedaten werden als JSON im Request
+Body gesendet. Antworten werden ebenfalls als gültige JSON-Daten zurückgegeben.
+Fehler werden mit sinnvollen Fehlermeldungen und passenden HTTP-Statuscodes
+beantwortet.
+
+Zusätzlich sind API Keys, JWT-Authentifizierung für geschützte Bereiche,
+Pagination, Sortierung, Filterung und Logging umgesetzt.
+
+
+2. Projektstruktur
+------------------
+
+Wichtige Projektbereiche:
+
+- backend/
+  Enthält die CodeIgniter-Backend-Applikation.
+
+- backend/app/Config/Routes.php
+  Definiert alle API-Routen.
+
+- backend/app/Controllers/Api/CategoriesController.php
+  Enthält die API-Logik für Kategorien.
+
+- backend/app/Controllers/Api/TodosController.php
+  Enthält die API-Logik für TODO-Aufgaben.
+
+- backend/app/Controllers/Api/AuthController.php
+  Erstellt JWT Tokens nach erfolgreichem Login.
+
+- backend/app/Controllers/Api/ProtectedController.php
+  Beispiel für einen geschützten API-Bereich mit JWT.
+
+- backend/app/Config/Api.php
+  Enthält die API Keys und JWT-Konfiguration.
+
+- backend/app/Filters/ApiKeyFilter.php
+  Prüft den API Key.
+
+- backend/app/Filters/JwtAuthFilter.php
+  Prüft den JWT Bearer Token.
+
+- backend/app/Filters/ApiLogFilter.php
+  Loggt API-Anfragen.
+
+- backend/app/Database/Migrations/
+  Enthält die Datenbank-Migrationen für Kategorien, TODOs, Kontakte und Logs.
+
+- frontend/
+  Enthält die Vue-Frontend-Applikation.
+
+- frontend/src/App.vue
+  Hauptansicht der ToDo App. Ruft die RESTful API auf.
+
+
+3. Voraussetzungen und Installation
+-----------------------------------
+
+Benötigte Software:
+
+- PHP 8.2 oder neuer
+- Composer
+- MySQL oder MariaDB
+- Node.js
+- npm
+
+Backend starten:
+
+cd backend
+php spark serve --host 127.0.0.1 --port 8080
+
+Frontend starten:
+
+cd frontend
+npm run dev -- --host 127.0.0.1 --port 5173
+
+Datenbank vorbereiten:
+
+1. MySQL starten.
+2. Datenbank todo_app erstellen.
+3. Migrationen ausführen:
+
+cd backend
+php spark migrate
+
+4. Beispieldaten einfügen:
+
+php spark db:seed DatabaseSeeder
+
+
+4. Authentifizierung mit API Key
+--------------------------------
+
+Alle RESTful API-Endpunkte sind durch einen API Key geschützt. Ohne gültigen API
+Key wird die Anfrage mit HTTP 401 abgelehnt.
+
+Der API Key kann auf zwei Arten gesendet werden:
+
+Variante 1: HTTP Header
+
+X-API-Key: dev-frontend-key-2026
+
+Variante 2: URL-Parameter
+
+?key=dev-frontend-key-2026
+
+Aktuell konfigurierte API Keys:
+
+- dev-frontend-key-2026
+  Benutzerkennung für Logs: frontend-dev
+
+- dev-admin-key-2026
+  Benutzerkennung für Logs: admin-dev
+
+Beispiel ohne gültigen API Key:
+
+GET /api/todos
+
+Antwort:
+
+HTTP Status: 401 Unauthorized
+
+{
+  "message": "Ungueltiger oder fehlender API Key.",
+  "errors": {
+    "key": "Senden Sie einen gueltigen API Key per X-API-Key Header oder ?key= URL-Parameter."
+  }
+}
+
+
+5. JWT-Authentifizierung für geschützte Bereiche
+------------------------------------------------
+
+Zusätzlich zum API Key gibt es einen geschützten Bereich, der nur mit einem
+gültigen JSON Web Token erreichbar ist.
+
+Login-Endpunkt:
+
+POST /api/auth/login
+
+Benötigte Header:
+
+Content-Type: application/json
+X-API-Key: dev-frontend-key-2026
+
+Request Body:
+
+{
+  "username": "admin",
+  "password": "Admin123!"
+}
+
+Erfolgreiche Antwort:
+
+HTTP Status: 200 OK
+
+{
+  "message": "Login erfolgreich.",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+
+Der erhaltene Token wird anschließend im Authorization Header gesendet:
+
+Authorization: Bearer <access_token>
+
+Geschützter Endpunkt:
+
+GET /api/protected
+
+Benötigte Header:
+
+X-API-Key: dev-frontend-key-2026
+Authorization: Bearer <access_token>
+
+Erfolgreiche Antwort:
+
+HTTP Status: 200 OK
+
+{
+  "message": "Geschuetzter Bereich erreichbar.",
+  "data": {
+    "user": "admin",
+    "name": "API Admin"
+  }
+}
+
+Antwort ohne JWT:
+
+HTTP Status: 401 Unauthorized
+
+{
+  "message": "JWT fehlt im Authorization Header.",
+  "errors": {
+    "authorization": "JWT fehlt im Authorization Header."
+  }
+}
+
+
+6. Allgemeine API-Regeln
+------------------------
+
+Datenformat:
+
+- Requests mit Daten verwenden JSON.
+- Antworten werden immer als JSON zurückgegeben.
+- Der Header Content-Type sollte application/json sein.
+
+Validierung:
+
+- IDs in der URL müssen positive Zahlen sein.
+- Pflichtfelder werden geprüft.
+- Ungültige JSON-Daten werden abgelehnt.
+- Nicht vorhandene Datensätze werden mit HTTP 404 beantwortet.
+- Ungültige Eingaben werden mit HTTP 400 oder 422 beantwortet.
+- Fachliche Konflikte werden mit HTTP 409 beantwortet.
+
+Pagination:
+
+GET-Endpunkte unterstützen:
+
+- limit
+  Anzahl Datensätze pro Seite. Erlaubt: 1 bis 100.
+
+- page
+  Aktuelle Seite. Muss mindestens 1 sein.
+
+Beispiel:
+
+GET /api/todos?limit=50&page=1
+
+Sortierung:
+
+GET-Endpunkte unterstützen:
+
+- order_by
+  Feld, nach dem sortiert wird.
+
+- direction
+  Sortierrichtung. Erlaubt: asc oder desc.
+
+Beispiel:
+
+GET /api/todos?order_by=date&direction=asc
+
+Filterung:
+
+TODOs können nach Kategorie gefiltert werden:
+
+GET /api/todos?category_id=123
+
+
+7. Datenmodell Kategorie
+------------------------
+
+Eine Kategorie wird im Frontend als Bereich angezeigt.
+
+Felder in API-Antworten:
+
+- id
+  Eindeutige ID der Kategorie.
+
+- name
+  Name der Kategorie.
+
+- description
+  Beschreibung der Kategorie.
+
+- isProtected
+  Gibt an, ob die Kategorie geschützt ist.
+
+- isUnlocked
+  Gibt an, ob die Kategorie im Frontend entsperrt ist.
+
+- createdAt
+  Erstellungsdatum.
+
+- updatedAt
+  Änderungsdatum.
+
+Beispiel:
+
+{
+  "id": 1,
+  "name": "Schule",
+  "description": "Aufgaben fuer Unterricht und Projektarbeit.",
+  "isProtected": false,
+  "isUnlocked": true,
+  "createdAt": "2026-06-03 12:00:00",
+  "updatedAt": "2026-06-03 12:00:00"
+}
+
+
+8. API-Endpunkte für Kategorien
+-------------------------------
+
+8.1 Alle Kategorien abfragen
+
+Art der Anfrage:
+
+GET /api/categories
+
+Optionale URL-Parameter:
+
+- limit
+- page
+- order_by
+- direction
+- include_todos
+
+Erlaubte Sortierfelder:
+
+- id
+- name
+- created_at
+- updated_at
+
+Beispiel:
+
+GET /api/categories?include_todos=1&limit=50&page=1&order_by=name&direction=asc
+
+Erfolgreiche Antwort:
+
+HTTP Status: 200 OK
+
+{
+  "data": [
+    {
+      "id": 1,
+      "name": "Schule",
+      "description": "Aufgaben fuer Unterricht und Projektarbeit.",
+      "isProtected": false,
+      "isUnlocked": true,
+      "createdAt": "2026-06-03 12:00:00",
+      "updatedAt": "2026-06-03 12:00:00",
+      "toDos": [
+        {
+          "id": 1,
+          "categoryId": 1,
+          "title": "REST API testen",
+          "description": "GET, POST, PATCH und DELETE mit JSON testen.",
+          "contactEmail": "lehrer@example.com",
+          "endDate": "2026-05-25",
+          "priority": "Hoch",
+          "status": "In Arbeit",
+          "createdAt": "2026-06-03 12:00:00",
+          "updatedAt": "2026-06-03 12:00:00"
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 50,
+    "total": 1
+  }
+}
+
+
+8.2 Einzelne Kategorie abfragen
+
+Art der Anfrage:
+
+GET /api/categories/{id}
+
+Beispiel:
+
+GET /api/categories/1
+
+Erfolgreiche Antwort:
+
+HTTP Status: 200 OK
+
+{
+  "data": {
+    "id": 1,
+    "name": "Schule",
+    "description": "Aufgaben fuer Unterricht und Projektarbeit.",
+    "isProtected": false,
+    "isUnlocked": true,
+    "createdAt": "2026-06-03 12:00:00",
+    "updatedAt": "2026-06-03 12:00:00",
+    "toDos": []
+  }
+}
+
+Fehler bei ungültiger ID:
+
+HTTP Status: 400 Bad Request
+
+{
+  "message": "Ungueltige Kategorie-ID in der URL.",
+  "errors": []
+}
+
+Fehler bei nicht vorhandener Kategorie:
+
+HTTP Status: 404 Not Found
+
+{
+  "message": "Kategorie wurde nicht gefunden.",
+  "errors": []
+}
+
+
+8.3 Kategorie erstellen
+
+Art der Anfrage:
+
+POST /api/categories
+
+Datenübergabe:
+
+Die Daten werden als JSON im Request Body gesendet.
+
+Pflichtfelder:
+
+- name
+
+Optionale Felder:
+
+- description
+- isProtected
+- password
+
+Falls isProtected true ist, muss ein Passwort gesendet werden.
+
+Request Body:
+
+{
+  "name": "Arbeit",
+  "description": "Aufgaben fuer die Arbeit.",
+  "isProtected": false
+}
+
+Erfolgreiche Antwort:
+
+HTTP Status: 201 Created
+
+{
+  "message": "Kategorie wurde erstellt.",
+  "data": {
+    "id": 4,
+    "name": "Arbeit",
+    "description": "Aufgaben fuer die Arbeit.",
+    "isProtected": false,
+    "isUnlocked": true,
+    "createdAt": "2026-06-03 12:00:00",
+    "updatedAt": "2026-06-03 12:00:00"
+  }
+}
+
+Fehler bei fehlendem Namen:
+
+HTTP Status: 422 Unprocessable Entity
+
+{
+  "message": "Die Eingabedaten sind ungueltig.",
+  "errors": {
+    "name": "Name ist erforderlich."
+  }
+}
+
+Fehler bei nicht erreichbarer Datenbank:
+
+HTTP Status: 503 Service Unavailable
+
+{
+  "message": "Datenbank ist nicht erreichbar. Bitte MySQL starten und Migrationen ausfuehren.",
+  "errors": {
+    "database": "Verbindung zu localhost:3306 / todo_app fehlgeschlagen."
+  }
+}
+
+
+8.4 Kategorie bearbeiten
+
+Art der Anfrage:
+
+PUT /api/categories/{id}
+PATCH /api/categories/{id}
+
+Datenübergabe:
+
+Die zu ändernden Felder werden als JSON gesendet.
+
+Request Body:
+
+{
+  "name": "Schule und Projekt",
+  "description": "Aktualisierte Beschreibung.",
+  "isProtected": false
+}
+
+Erfolgreiche Antwort:
+
+HTTP Status: 200 OK
+
+{
+  "message": "Kategorie wurde aktualisiert.",
+  "data": {
+    "id": 1,
+    "name": "Schule und Projekt",
+    "description": "Aktualisierte Beschreibung.",
+    "isProtected": false,
+    "isUnlocked": true,
+    "createdAt": "2026-06-03 12:00:00",
+    "updatedAt": "2026-06-03 12:10:00"
+  }
+}
+
+
+8.5 Kategorie löschen
+
+Art der Anfrage:
+
+DELETE /api/categories/{id}
+
+Fachliche Regel:
+
+Eine Kategorie darf nur gelöscht werden, wenn sich keine TODO-Aufgaben mehr in
+dieser Kategorie befinden. Sind noch TODOs vorhanden, wird die Anfrage mit HTTP
+409 abgelehnt.
+
+Erfolgreiche Antwort:
+
+HTTP Status: 200 OK
+
+{
+  "message": "Kategorie wurde geloescht."
+}
+
+Fehler, wenn noch TODOs vorhanden sind:
+
+HTTP Status: 409 Conflict
+
+{
+  "message": "Kategorie kann nicht geloescht werden, solange TODO-Aufgaben darin vorhanden sind.",
+  "errors": {
+    "category_id": "Verschieben oder loeschen Sie zuerst alle TODO-Aufgaben dieser Kategorie."
+  }
+}
+
+
+8.6 Geschützte Kategorie entsperren
+
+Art der Anfrage:
+
+POST /api/categories/{id}/unlock
+
+Request Body:
+
+{
+  "password": "Admin123!"
+}
+
+Erfolgreiche Antwort:
+
+HTTP Status: 200 OK
+
+{
+  "message": "Kategorie wurde entsperrt."
+}
+
+Fehler bei falschem Passwort:
+
+HTTP Status: 403 Forbidden
+
+{
+  "message": "Falsches Passwort.",
+  "errors": []
+}
+
+
+9. Datenmodell TODO-Aufgabe
+---------------------------
+
+Felder in API-Antworten:
+
+- id
+  Eindeutige ID der TODO-Aufgabe.
+
+- categoryId
+  ID der zugehörigen Kategorie.
+
+- categoryName
+  Name der Kategorie.
+
+- title
+  Titel der Aufgabe.
+
+- description
+  Beschreibung der Aufgabe.
+
+- contactEmail
+  Kontakt-E-Mails als Text.
+
+- contactEmails
+  Kontakt-E-Mails als Array.
+
+- endDate
+  Enddatum im Format YYYY-MM-DD.
+
+- priority
+  Priorität: Hoch, Mittel oder Niedrig.
+
+- status
+  Status: Offen, In Arbeit oder Erledigt.
+
+- createdAt
+  Erstellungsdatum.
+
+- updatedAt
+  Änderungsdatum.
+
+Beispiel:
+
+{
+  "id": 1,
+  "categoryId": 1,
+  "categoryName": "Schule",
+  "title": "REST API testen",
+  "description": "GET, POST, PATCH und DELETE mit JSON testen.",
+  "contactEmail": "lehrer@example.com",
+  "contactEmails": [
+    "lehrer@example.com"
+  ],
+  "endDate": "2026-05-25",
+  "priority": "Hoch",
+  "status": "In Arbeit",
+  "createdAt": "2026-06-03 12:00:00",
+  "updatedAt": "2026-06-03 12:00:00"
+}
+
+
+10. API-Endpunkte für TODO-Aufgaben
+-----------------------------------
+
+10.1 Alle TODO-Aufgaben abfragen
+
+Art der Anfrage:
+
+GET /api/todos
+
+Optionale URL-Parameter:
+
+- limit
+- page
+- order_by
+- direction
+- category_id
+
+Erlaubte Sortierfelder:
+
+- id
+- title
+- date
+- end_date
+- priority
+- status
+- created_at
+- updated_at
+
+Beispiel mit Pagination:
+
+GET /api/todos?limit=50&page=1
+
+Beispiel mit Sortierung:
+
+GET /api/todos?order_by=date&direction=asc
+
+Beispiel mit Filterung nach Kategorie:
+
+GET /api/todos?category_id=123
+
+Erfolgreiche Antwort:
+
+HTTP Status: 200 OK
+
+{
+  "data": [
+    {
+      "id": 1,
+      "categoryId": 1,
+      "categoryName": "Schule",
+      "title": "REST API testen",
+      "description": "GET, POST, PATCH und DELETE mit JSON testen.",
+      "contactEmail": "lehrer@example.com",
+      "contactEmails": [
+        "lehrer@example.com"
+      ],
+      "endDate": "2026-05-25",
+      "priority": "Hoch",
+      "status": "In Arbeit",
+      "createdAt": "2026-06-03 12:00:00",
+      "updatedAt": "2026-06-03 12:00:00"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 50,
+    "total": 1
+  }
+}
+
+Fehler bei ungültigem limit:
+
+HTTP Status: 400 Bad Request
+
+{
+  "message": "Limit muss zwischen 1 und 100 liegen.",
+  "errors": []
+}
+
+Fehler bei ungültiger category_id:
+
+HTTP Status: 400 Bad Request
+
+{
+  "message": "Ungueltige category_id in der URL.",
+  "errors": []
+}
+
+
+10.2 Einzelne TODO-Aufgabe abfragen
+
+Art der Anfrage:
+
+GET /api/todos/{id}
+
+Beispiel:
+
+GET /api/todos/1
+
+Erfolgreiche Antwort:
+
+HTTP Status: 200 OK
+
+{
+  "data": {
+    "id": 1,
+    "categoryId": 1,
+    "categoryName": "Schule",
+    "title": "REST API testen",
+    "description": "GET, POST, PATCH und DELETE mit JSON testen.",
+    "contactEmail": "lehrer@example.com",
+    "contactEmails": [
+      "lehrer@example.com"
+    ],
+    "endDate": "2026-05-25",
+    "priority": "Hoch",
+    "status": "In Arbeit",
+    "createdAt": "2026-06-03 12:00:00",
+    "updatedAt": "2026-06-03 12:00:00"
+  }
+}
+
+Fehler bei nicht vorhandener Aufgabe:
+
+HTTP Status: 404 Not Found
+
+{
+  "message": "TODO wurde nicht gefunden.",
+  "errors": []
+}
+
+
+10.3 TODO-Aufgabe erstellen
+
+Art der Anfrage:
+
+POST /api/todos
+
+Datenübergabe:
+
+Die Daten werden als JSON im Request Body gesendet.
+
+Pflichtfelder:
+
+- categoryId oder category_id
+- title
+- description
+- endDate oder end_date
+
+Optionale Felder:
+
+- contactEmail
+- contactEmails
+- contact_emails
+- priority
+- status
+
+Erlaubte Werte für priority:
+
+- Hoch
+- Mittel
+- Niedrig
+
+Erlaubte Werte für status:
+
+- Offen
+- In Arbeit
+- Erledigt
+
+Request Body:
+
+{
+  "categoryId": 1,
+  "title": "Dokumentation schreiben",
+  "description": "RESTful API sauber dokumentieren.",
+  "contactEmail": "person@example.com",
+  "endDate": "2026-06-10",
+  "priority": "Mittel",
+  "status": "Offen"
+}
+
+Erfolgreiche Antwort:
+
+HTTP Status: 201 Created
+
+{
+  "message": "TODO wurde erstellt.",
+  "data": {
+    "id": 5,
+    "categoryId": 1,
+    "categoryName": "Schule",
+    "title": "Dokumentation schreiben",
+    "description": "RESTful API sauber dokumentieren.",
+    "contactEmail": "person@example.com",
+    "contactEmails": [
+      "person@example.com"
+    ],
+    "endDate": "2026-06-10",
+    "priority": "Mittel",
+    "status": "Offen",
+    "createdAt": "2026-06-03 12:00:00",
+    "updatedAt": "2026-06-03 12:00:00"
+  }
+}
+
+Fehler bei ungültigen Eingabedaten:
+
+HTTP Status: 422 Unprocessable Entity
+
+{
+  "message": "Die Eingabedaten sind ungueltig.",
+  "errors": {
+    "title": "Titel ist erforderlich.",
+    "end_date": "Enddatum ist erforderlich."
+  }
+}
+
+
+10.4 TODO-Aufgabe bearbeiten
+
+Art der Anfrage:
+
+PUT /api/todos/{id}
+PATCH /api/todos/{id}
+
+Datenübergabe:
+
+Es müssen nur die Felder gesendet werden, die geändert werden sollen.
+
+Request Body:
+
+{
+  "title": "Dokumentation überarbeiten",
+  "status": "In Arbeit",
+  "priority": "Hoch"
+}
+
+Erfolgreiche Antwort:
+
+HTTP Status: 200 OK
+
+{
+  "message": "TODO wurde aktualisiert.",
+  "data": {
+    "id": 5,
+    "categoryId": 1,
+    "categoryName": "Schule",
+    "title": "Dokumentation überarbeiten",
+    "description": "RESTful API sauber dokumentieren.",
+    "contactEmail": "person@example.com",
+    "contactEmails": [
+      "person@example.com"
+    ],
+    "endDate": "2026-06-10",
+    "priority": "Hoch",
+    "status": "In Arbeit",
+    "createdAt": "2026-06-03 12:00:00",
+    "updatedAt": "2026-06-03 12:15:00"
+  }
+}
+
+Fehler bei nicht vorhandener Aufgabe:
+
+HTTP Status: 404 Not Found
+
+{
+  "message": "TODO wurde nicht gefunden.",
+  "errors": []
+}
+
+
+10.5 TODO-Aufgabe löschen
+
+Art der Anfrage:
+
+DELETE /api/todos/{id}
+
+Erfolgreiche Antwort:
+
+HTTP Status: 200 OK
+
+{
+  "message": "TODO wurde geloescht."
+}
+
+Fehler bei ungültiger ID:
+
+HTTP Status: 400 Bad Request
+
+{
+  "message": "Ungueltige TODO-ID in der URL.",
+  "errors": []
+}
+
+
+11. Fehlerantworten und HTTP-Statuscodes
+----------------------------------------
+
+Die API verwendet sinnvolle HTTP-Statuscodes:
+
+- 200 OK
+  Anfrage erfolgreich.
+
+- 201 Created
+  Neuer Datensatz wurde erstellt.
+
+- 400 Bad Request
+  Ungültige URL-Parameter oder ungültige Anfrage.
+
+- 401 Unauthorized
+  API Key fehlt, API Key ist ungültig oder JWT fehlt.
+
+- 403 Forbidden
+  Zugriff verweigert, zum Beispiel falsches Passwort.
+
+- 404 Not Found
+  Datensatz existiert nicht.
+
+- 409 Conflict
+  Fachlicher Konflikt, zum Beispiel Kategorie enthält noch TODOs.
+
+- 422 Unprocessable Entity
+  JSON-Daten wurden verstanden, sind aber inhaltlich ungültig.
+
+- 503 Service Unavailable
+  Datenbank ist nicht erreichbar.
+
+Standardformat für Fehler:
+
+{
+  "message": "Beschreibung des Fehlers.",
+  "errors": {
+    "feldname": "Genaue Fehlermeldung."
+  }
+}
+
+
+12. Logging
+-----------
+
+Jede API-Anfrage wird geloggt. Dadurch ist nachvollziehbar, welcher API-Benutzer
+welche Anfrage ausgeführt hat.
+
+Geloggte Informationen:
+
+- API-Benutzer aus dem API Key
+- HTTP-Methode
+- Pfad
+- Query String
+- HTTP-Statuscode
+- IP-Adresse
+- Zeitpunkt der Anfrage
+
+Die Logs werden über den CodeIgniter Logger geschrieben. Zusätzlich können sie
+in der Datenbanktabelle api_request_logs gespeichert werden, sobald die
+entsprechende Migration ausgeführt wurde.
+
+Beispiel für einen Log-Eintrag inhaltlich:
+
+{
+  "api_user": "frontend-dev",
+  "method": "POST",
+  "path": "/api/categories",
+  "query_string": "",
+  "status_code": 201,
+  "ip_address": "127.0.0.1",
+  "created_at": "2026-06-03 12:00:00"
+}
+
+
+13. CORS und Frontend-Anbindung
+-------------------------------
+
+Das Frontend läuft lokal auf:
+
+http://127.0.0.1:5173
+
+Das Backend läuft lokal auf:
+
+http://127.0.0.1:8080
+
+Da Frontend und Backend auf verschiedenen Ports laufen, wird CORS benötigt.
+Die API erlaubt deshalb die nötigen Header:
+
+- Content-Type
+- Authorization
+- X-Requested-With
+- X-API-Key
+
+Auch OPTIONS-Preflight-Anfragen werden beantwortet. Das ist wichtig, weil der
+Browser vor POST, PUT, PATCH oder DELETE mit eigenen Headern zuerst eine
+OPTIONS-Anfrage sendet.
+
+Das Frontend sendet den API Key automatisch im Header:
+
+X-API-Key: dev-frontend-key-2026
+
+
+14. Manuelle Tests mit PowerShell
+---------------------------------
+
+14.1 Kategorien abfragen
+
+Invoke-RestMethod http://127.0.0.1:8080/api/categories `
+  -Headers @{ "X-API-Key" = "dev-frontend-key-2026" }
+
+14.2 Kategorie erstellen
+
+Invoke-RestMethod http://127.0.0.1:8080/api/categories `
+  -Method POST `
+  -Headers @{ "X-API-Key" = "dev-frontend-key-2026" } `
+  -ContentType "application/json" `
+  -Body '{"name":"Arbeit","description":"Aufgaben fuer die Arbeit.","isProtected":false}'
+
+14.3 TODO erstellen
+
+Invoke-RestMethod http://127.0.0.1:8080/api/todos `
+  -Method POST `
+  -Headers @{ "X-API-Key" = "dev-frontend-key-2026" } `
+  -ContentType "application/json" `
+  -Body '{"categoryId":1,"title":"Test TODO","description":"Beschreibung","endDate":"2026-06-10","priority":"Mittel","status":"Offen"}'
+
+14.4 TODOs mit Filter abfragen
+
+Invoke-RestMethod "http://127.0.0.1:8080/api/todos?category_id=1&limit=50&page=1&order_by=date" `
+  -Headers @{ "X-API-Key" = "dev-frontend-key-2026" }
+
+14.5 JWT Login
+
+$login = Invoke-RestMethod http://127.0.0.1:8080/api/auth/login `
+  -Method POST `
+  -Headers @{ "X-API-Key" = "dev-frontend-key-2026" } `
+  -ContentType "application/json" `
+  -Body '{"username":"admin","password":"Admin123!"}'
+
+14.6 Geschützten Bereich testen
+
+Invoke-RestMethod http://127.0.0.1:8080/api/protected `
+  -Headers @{
+    "X-API-Key" = "dev-frontend-key-2026"
+    "Authorization" = "Bearer $($login.access_token)"
+  }
+
+
+15. Erfüllung der Anforderungen
+-------------------------------
+
+Anforderung: API für TODO Aufgaben und TODO Kategorien
+Umsetzung: Es gibt vollständige REST-Endpunkte für Kategorien und TODOs.
+
+Anforderung: Datenübergabe per JSON
+Umsetzung: POST, PUT und PATCH verwenden JSON im Request Body.
+
+Anforderung: Korrekte Validierung der Eingabedaten
+Umsetzung: Pflichtfelder, Längen, Datumsformat, E-Mail-Adressen, Priorität,
+Status und Kategorie-Existenz werden geprüft.
+
+Anforderung: Korrekte Validierung der URL-Parameter
+Umsetzung: IDs, category_id, limit, page, order_by und direction werden geprüft.
+
+Anforderung: Daten aus der Datenbank abholen und aufbereiten
+Umsetzung: Controller laden Daten über Models, ergänzen Kategorienamen und
+Kontakt-E-Mails und geben strukturierte JSON-Daten zurück.
+
+Anforderung: Daten aufbereiten und korrekt speichern
+Umsetzung: Eingaben werden normalisiert, Kontakte werden separat gespeichert,
+Passwörter geschützter Kategorien werden gehasht.
+
+Anforderung: Rückgabeantwort per JSON
+Umsetzung: Alle Erfolgs- und Fehlerantworten werden per JSON zurückgegeben.
+
+Anforderung: Sinnvolle Fehlermeldungen mit korrektem HTTP-Header
+Umsetzung: Fehler liefern passende HTTP-Statuscodes und JSON mit message/errors.
+
+Anforderung: Pagination
+Umsetzung: GET-Endpunkte unterstützen limit und page.
+
+Anforderung: Sortierung
+Umsetzung: GET-Endpunkte unterstützen order_by und direction.
+
+Anforderung: Filterung nach Kategorie
+Umsetzung: GET /api/todos unterstützt category_id.
+
+Anforderung: GET, POST, PUT/PATCH, DELETE
+Umsetzung: Alle geforderten HTTP-Methoden sind vorhanden.
+
+Anforderung: Existenzprüfung vor Bearbeitung
+Umsetzung: Updates und Deletes prüfen, ob der Datensatz existiert.
+
+Anforderung: Kategorien dürfen nur gelöscht werden, wenn keine Aufgaben darin sind
+Umsetzung: DELETE /api/categories/{id} gibt HTTP 409 zurück, wenn TODOs vorhanden
+sind.
+
+Anforderung: Zugriff nur mit gültigem API Key
+Umsetzung: ApiKeyFilter schützt die API.
+
+Anforderung: Mehrere API Keys
+Umsetzung: Mehrere Keys sind in Config/Api.php hinterlegt.
+
+Anforderung: Benutzeridentifikation durch API Key für Logs
+Umsetzung: Jeder API Key ist einer Benutzerkennung zugeordnet.
+
+Anforderung: Geschützter Bereich mit JWT
+Umsetzung: /api/auth/login erstellt JWT, /api/protected verlangt JWT.
+
+Anforderung: Jede Anfrage wird geloggt
+Umsetzung: ApiLogFilter schreibt API-Logs und kann zusätzlich in die Datenbank
+loggen.
+
+
+16. Persönliches Feedback der Projektarbeit
+-------------------------------------------
+
+Die Projektarbeit war anspruchsvoll, weil nicht nur einfache CRUD-Funktionen
+umgesetzt werden mussten, sondern eine vollständige RESTful API mit
+Authentifizierung, Validierung, Fehlerbehandlung, Datenbankanbindung und
+Frontend-Integration.
+
+Besonders wichtig war es, die API nicht nur funktional zu machen, sondern auch
+stabil und nachvollziehbar. Dazu gehören klare HTTP-Statuscodes, verständliche
+JSON-Fehlermeldungen und Logging für jede Anfrage. Dadurch kann man Fehler
+schneller finden und später besser nachvollziehen, welcher API-Benutzer welche
+Aktion ausgeführt hat.
+
+Ein wichtiger Lernpunkt war die saubere Trennung zwischen Backend und Frontend.
+Das Frontend soll nur die API verwenden und keine direkte Datenbanklogik kennen.
+Das Backend übernimmt Validierung, Speicherung und Sicherheitsprüfungen. Dadurch
+ist die Architektur übersichtlicher und besser wartbar.
+
+Auch die CORS-Konfiguration war ein wichtiger Teil der Arbeit. Da Frontend und
+Backend lokal auf verschiedenen Ports laufen, muss der Browser Preflight-
+Anfragen korrekt beantwortet bekommen. Erst dadurch können POST-, PUT-, PATCH-
+und DELETE-Anfragen mit API-Key-Header zuverlässig funktionieren.
+
+Insgesamt zeigt das Projekt, wie eine moderne Webanwendung aufgebaut werden
+kann: Ein Vue-Frontend kommuniziert über eine JSON-basierte RESTful API mit
+einem CodeIgniter-Backend, das Daten validiert, speichert, schützt und
+protokolliert. Die wichtigsten Anforderungen der Aufgabenstellung wurden damit
+systematisch umgesetzt.
+
+
+17. Hinweise für die Abgabe
+---------------------------
+
+Vor der Abgabe sollte geprüft werden:
+
+1. MySQL läuft.
+2. Die Datenbank todo_app existiert.
+3. php spark migrate wurde erfolgreich ausgeführt.
+4. php spark db:seed DatabaseSeeder wurde ausgeführt.
+5. Backend läuft auf http://127.0.0.1:8080.
+6. Frontend läuft auf http://127.0.0.1:5173.
+7. Kategorien können erstellt, bearbeitet und gelöscht werden.
+8. TODOs können erstellt, bearbeitet, gefiltert, sortiert und gelöscht werden.
+9. DELETE einer Kategorie mit vorhandenen TODOs gibt HTTP 409 zurück.
+10. API-Anfragen ohne API Key geben HTTP 401 zurück.
+11. JWT Login und /api/protected funktionieren.
+12. Die API-Logs werden geschrieben.
+
