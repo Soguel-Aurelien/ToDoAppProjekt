@@ -1,5 +1,3 @@
-NICO UND BEN SIND DIE GRÖSSTE CHILLER UND HS DER WELT
-UND AURELIEN EIN RIESE MACHER
 RESTful API Dokumentation - ToDo App
 ====================================
 
